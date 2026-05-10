@@ -1,10 +1,11 @@
-SRC=src/main.asm
-OUT=build/main.bin
+PRJ=hello
+SRC=src/$(PRJ).asm
+OUT=build/$(PRJ).bin
 
 ASM=lwasm
 
 EMU_MAME=mame
- EMU_RETROARCH=flatpak run org.libretro.RetroArch
+EMU_RETROARCH=flatpak run org.libretro.RetroArch
 CORE=$(HOME)/.var/app/org.libretro.RetroArch/config/retroarch/cores/vecx_libretro.so
 
 
@@ -12,7 +13,8 @@ all: $(OUT)
 
 $(OUT): $(SRC)
 	mkdir -p build
-	$(ASM) -f raw -o $(OUT) $(SRC)
+	$(ASM) -f srec -o build/$(PRJ).srec $(SRC)
+	objcopy -I srec -O binary --gap-fill 0xFF build/$(PRJ).srec $(OUT)
 
 run: $(OUT)
 ifeq ($(EMULATOR),retroarch)
