@@ -2,9 +2,6 @@
 ; Vectrex Program: Hello World
 ; ============================
 
-; Entry point at address $0000 (reset vector)
-                ORG     $0000
-
 ;***************************************************************************
 ; DEFINE SECTION
 ;***************************************************************************
@@ -43,8 +40,8 @@ main:
 ; DATA SECTION
 ;***************************************************************************
 hello_world_string:
-                FCC   "HELLO WORLD"              ; only capital letters
-                FCB   $80                        ; $80 is end of string
+                FCC   	"HELLO WORLD"              ; only capital letters
+                FCB   	$80                        ; $80 is end of string
 ;***************************************************************************
-                END  main
+                END  	main
 ;***************************************************************************
