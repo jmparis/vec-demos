@@ -1,88 +1,50 @@
-; ========================================
+; ============================
 ; Vectrex Program: Hello World
-; ========================================
+; ============================
 
 ; Entry point at address $0000 (reset vector)
-        ORG     $0000
+                ORG     $0000
 
-; ----------------------------------------
-; Music callback pointer (unused, points to default handler)
-; ----------------------------------------
-
-music1  EQU     $FD0D
-
-; ----------------------------------------
-; Header Vectrex obligatoire (required by Vectrex BIOS)
-; ----------------------------------------
-; The BIOS looks for specific data at fixed offsets from the reset vector:
-; - Offset $00-$1F: Cartridge name and year (16 bytes, $80 terminated)
-; - Offset $20-$21: Music callback address (2 bytes)
-; - Offset $22-$25: Default scale, vector brightness, etc.
-; - Offset $26-$7F: Additional cartridge info
-
-; Cartridge identifier: "g GCE 2025" + $80 terminator
-; Format: 'g' (game flag) + 2 spaces + publisher + 4-digit year
-        fcc     "g GCE 2026"
-        fcb     $80
-
-; Music callback address - called during vertical blank
-; Points to a simple return routine (RTS) in ROM
-        fdb     music1
-
-; Default scale factor for vectors (precision for coordinate scaling)
-        fcb     $F8    ; Default: $F8 = -8 (scaled down)
-
-; Vector brightness intensity ($00-$7F, $FF = max)
-        fcb     $50
-
-; Vector timer (delay after drawing, affects refresh rate)
-        fcb     $20
-
-; Joystick sensitivity thresholds (Y, X)
-        fcb     $80
-
-; Program title displayed in BIOS menu (terminated by $80)
-        fcc     "HELLO"
-        fcb     $80
-
-; ----------------------------------------
-; Programme principal (main program loop)
-; ----------------------------------------
-
+;***************************************************************************
+; DEFINE SECTION
+;***************************************************************************
+Intensity_5F    EQU     $F2A5                   ; BIOS Intensity routine
+Print_Str_d     EQU     $F37A                   ; BIOS print routine
+Wait_Recal      EQU     $F192                   ; BIOS recalibration
+music1          EQU     $FD0D                   ; address of a (BIOS ROM)
+                                                ; music
+; start of vectrex memory with cartridge name...
+                ORG     0
+;***************************************************************************
+; HEADER SECTION
+;***************************************************************************
+                FCC     "g GCE 1998"            ; 'g' is copyright sign
+                FCB     $80                     ; reserved
+                FDB     music1                  ; music from the rom
+                FCB     $F8,$50,$20,$AA         ; height, width, rel y, rel x
+                                                ; (from 0,0)
+                FCC     "HELLO WORLD PROG 1"    ; some game information,
+                FCB     $80                     ; ending with $80
+                FCB     0                       ; end of game header
+;***************************************************************************
+; CODE SECTION
+;***************************************************************************
+; here the cartridge program starts off
 main:
-loop:
-        ; Wait for vertical blank and recalibrate the vector display
-        ; This ensures stable vector positioning and prevents drift
-        jsr     $F192      ; Wait_Recal
-
-        ; Set display intensity (brightness) for vectors
-        ; A register contains intensity value (0-255)
-	lda	#$5F
-        jsr     $F2A5      ; Intensity
-
-        ; Load address of message string into U register
-        ; Print_Str_d ($F37A) reads 2 position bytes (Y, X) then the string
-        ldu     #message
-        ldx     #$0000         ; Position relative to center of screen
-        jsr     $F37A          ; Print_Str_d
-
-        ; Infinite loop - wait for next frame
-        ; BIOS Wait_Recal will be called again on next interrupt
-        bra     loop
-
-; ----------------------------------------
-; Texte affiché (displayed text with position)
-; ----------------------------------------
-
-message:
-        ; Y coordinate offset from center (-128 to +127)
-        ; $10 = 16 = moves down from center
-        fcb     $10
-
-        ; X coordinate offset from center (-128 to +127)
-        ; $20 = 32 = moves right from center
-        fcb     $00
-
-        ; Null-terminated string (must end with $80 per Vectrex BIOS)
-        fcc     "HELLO VECTREX!"
-        fcb     $80
+                JSR     Wait_Recal              ; Vectrex BIOS recalibration
+                JSR     Intensity_5F            ; Sets the intensity of the
+                                                ; vector beam to $5f
+                LDU     #hello_world_string     ; address of string
+                LDA     #$10                    ; Text position relative Y
+                LDB     #-$50                   ; Text position relative X
+                JSR     Print_Str_d             ; Vectrex BIOS print routine
+                BRA     main                    ; and repeat forever
+;***************************************************************************
+; DATA SECTION
+;***************************************************************************
+hello_world_string:
+                FCC   "HELLO WORLD"              ; only capital letters
+                FCB   $80                        ; $80 is end of string
+;***************************************************************************
+                END  main
+;***************************************************************************
