@@ -1,4 +1,4 @@
-PRJ=hello
+PRJ := $(patsubst vec-%,%,$(notdir $(CURDIR)))
 SRCDIR=src
 BUILDDIR=build
 SRC=$(SRCDIR)/$(PRJ).asm
