@@ -7,7 +7,7 @@
             "command": "make",
             "group": {
                 "kind": "build",
-                "isDefault": true
+                "isDefault": false
             },
             "problemMatcher": []
         },
@@ -23,7 +23,7 @@
             "dependsOn": ["Vectrex Build", "Vectrex Run"],
             "group": {
                 "kind": "build",
-                "isDefault": false
+                "isDefault": true
             }
         }
     ]

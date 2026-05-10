@@ -1,6 +1,7 @@
 [
     {
         "key": "f5",
-        "command": "workbench.action.tasks.build"
+        "command": "workbench.action.tasks.build",
+        "when": "editorTextFocus"
     }
 ]
