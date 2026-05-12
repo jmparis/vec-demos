@@ -11,7 +11,7 @@ Wait_Recal      EQU     $F192                   ; BIOS recalibration
 music1          EQU     $FD0D                   ; address of a (BIOS ROM)
                                                 ; music
 ; start of vectrex memory with cartridge name...
-                ORG     0
+                ORG     $0
 ;***************************************************************************
 ; HEADER SECTION
 ;***************************************************************************
@@ -20,7 +20,7 @@ music1          EQU     $FD0D                   ; address of a (BIOS ROM)
                 FDB     music1                  ; music from the rom
                 FCB     $F8,$50,$20,$AA         ; height, width, rel y, rel x
                                                 ; (from 0,0)
-                FCC     "HELLO WORLD PROG 1"    ; some game information,
+                FCC     "PROG 1"                ; some game information,
                 FCB     $80                     ; ending with $80
                 FCB     0                       ; end of game header
 ;***************************************************************************
@@ -40,8 +40,8 @@ main:
 ; DATA SECTION
 ;***************************************************************************
 hello_world_string:
-                FCC   	"HELLO WORLD"              ; only capital letters
-                FCB   	$80                        ; $80 is end of string
+                FCC   	"HELLO WORLD !"         ; only capital letters
+                FCB   	$80                     ; $80 is end of string
 ;***************************************************************************
                 END  	main
 ;***************************************************************************
