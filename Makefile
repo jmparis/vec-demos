@@ -1,8 +1,9 @@
-PRJ := $(patsubst vec-%,%,$(notdir $(CURDIR)))
+#PRJ := $(patsubst vec-%,%,$(notdir $(CURDIR)))
+PRJ := hello
 SRCDIR=src
 BUILDDIR=build
 SRC=$(SRCDIR)/$(PRJ).asm
-OUT=$(BUILDDIR)/$(PRJ).bin
+ROM=$(BUILDDIR)/$(PRJ).bin
 
 ASM=lwasm
 
@@ -22,7 +23,9 @@ JSVECX_BOPT	=	fast	# Fast mode (no flicker, no sound, no gameinfo)
 JSVECX_SOUND=	on
 
 # Colors for help output
+RED=\033[1;31m
 GREEN=\033[1;32m
+YELLOW=\033[1;33m
 RESET=\033[0m
 
 #
@@ -33,16 +36,16 @@ RESET=\033[0m
 # Default target
 help: usage
 
-all: $(OUT)
+all: $(ROM)
 
-$(OUT): $(SRC)
+$(ROM): $(SRC)
 	mkdir -p build
-	$(ASM) -f raw -o $(OUT) $(SRC)
-#	objcopy -I srec -O binary --gap-fill 0xFF build/$(PRJ).srec $(OUT)
+	$(ASM) -f raw -o $(ROM) $(SRC)
+#	objcopy -I srec -O binary --gap-fill 0xFF build/$(PRJ).srec $(ROM)
 
 run: run_mame
 
-run_mame: $(OUT)
+run_mame: $(ROM)
 	$(EMU_MAME) vectrex \
 	-window        \
 	-nomax         \
@@ -51,14 +54,14 @@ run_mame: $(OUT)
 	-skip_gameinfo \
 	-flicker 0.2   \
 	-speed 1.0     \
-	-cart $(OUT)
+	-cart $(ROM)
 
-run_retroarch: $(OUT)
-	$(EMU_RETROARCH) -L $(CORE) $(OUT)
+run_retroarch: $(ROM)
+	$(EMU_RETROARCH) -L $(CORE) $(ROM)
 
-run_jsvecx: $(OUT)
+run_jsvecx: $(ROM)
 	mkdir -p $(JSVECX_DIR)/roms
-	cp $(OUT) $(JSVECX_ROM)
+	cp $(ROM) $(JSVECX_ROM)
 	@printf "$(GREEN)Open:$(RESET) http://localhost:$(JSVECX_PORT)/?rom=$(PRJ)&sound=$(JSVECX_SOUND)&bios=$(JSVECX_BIOS)&bopt=$(JSVECX_BOPT)\n"
 	cd $(JSVECX_DIR) && python3 -m http.server $(JSVECX_PORT)
 
