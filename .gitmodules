@@ -1,4 +1,4 @@
-[submodule "tools/tools/jsvecx"]
-	path = tools/tools/jsvecx
+[submodule "tools/jsvecx"]
+	path = tools/jsvecx
 	url = https://github.com/DrSnuggles/jsvecx
 	branch = dev
