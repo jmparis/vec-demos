@@ -5,7 +5,7 @@
 ;***************************************************************************
 ; DEFINE SECTION
 ;***************************************************************************
-                INCLUDE "../include/VECTREX.I"
+                INCLUDE "../include/vectrex.i"
 
 text_packet     EQU     $C880                   ; user RAM: Y, X, string, $80
 text_y          EQU     text_packet             ; user RAM: text Y position
