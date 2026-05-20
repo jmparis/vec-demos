@@ -1,4 +1,5 @@
 build/*.bin
+build/*.lst
 build/carre.srec
 build/hello.srec
 tools/jsvecx/
