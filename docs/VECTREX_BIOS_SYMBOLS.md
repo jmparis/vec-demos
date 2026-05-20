@@ -6,6 +6,12 @@ This file is a quick AI-facing reminder. For complete behavior, timings, and
 calling conventions, refer to the Vectrex BIOS documentation listed in
 `AGENTS.md`.
 
+For the exhaustive BIOS routine list, always use:
+
+- Appendix A: https://www.playvectrex.com/designit/chrissalo/appendixa.htm
+- ROM Reference by Bruce Tomlin:
+  https://www.playvectrex.com/designit/chrissalo/appendixa.htm#Reference
+
 ## Display And Frame
 
 - `Wait_Recal`: wait for frame recalibration and reset the beam reference.
