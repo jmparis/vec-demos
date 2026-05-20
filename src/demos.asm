@@ -259,8 +259,8 @@ menu_help_exit_packet:
                 FCC     "BUTTON 2 TO EXIT"
                 FCB     $80                     ; $80 is end of string
 
-                INCLUDE "hello.asm"
-                INCLUDE "music.asm"
+                INCLUDE "hello/hello.asm"
+                INCLUDE "music/music.asm"
 
 ;***************************************************************************
                 END     main
