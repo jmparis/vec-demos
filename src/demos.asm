@@ -10,9 +10,16 @@
 menu_choice     EQU     $C8C0                   ; user RAM: highlighted menu item
 menu_joy_lock   EQU     $C8C1                   ; user RAM: joystick debounce flag
 menu_launch     EQU     $C8C2                   ; user RAM: requested menu launch
+menu_hello_ram  EQU     $C8D0                   ; user RAM: Hello menu text packet
+menu_music_ram  EQU     $C8E8                   ; user RAM: Music menu text packet
 menu_first      EQU     0                       ; menu index: Hello World demo
 menu_second     EQU     1                       ; menu index: Music demo
 menu_no_launch  EQU     $FF                     ; no menu entry requested
+menu_text_first EQU     2                       ; text starts after Y, X bytes
+menu_cursor     EQU     $3E                     ; '>' cursor character
+menu_space      EQU     $20                     ; space character
+menu_hello_len  EQU     18                      ; Y, X, 15 chars, $80
+menu_music_len  EQU     10                      ; Y, X, 7 chars, $80
 
 ; start of vectrex memory with cartridge name...
                 ORG     $0
@@ -70,6 +77,32 @@ InitMenu:
                 STA     menu_launch
                 LDA     #3
                 STA     Vec_Joy_Mux_1_Y         ; BIOS reads controller 1 Y axis
+                JSR     CopyMenuTextPackets     ; Copy mutable menu strings to RAM
+                RTS
+
+; ---------------------------------------------------------------------------
+; CopyMenuTextPackets
+; Copies menu text packets to RAM so DrawMenu can replace the first character
+; with the cursor without attempting to modify cartridge ROM.
+; ---------------------------------------------------------------------------
+CopyMenuTextPackets:
+                LDX     #menu_hello_template    ; ROM source: Y, X, string
+                LDU     #menu_hello_ram         ; RAM packet for Print_Str_yx
+                LDB     #menu_hello_len         ; Copy count, including $80
+copy_menu_hello:
+                LDA     ,X+
+                STA     ,U+
+                DECB
+                BNE     copy_menu_hello
+
+                LDX     #menu_music_template    ; ROM source: Y, X, string
+                LDU     #menu_music_ram         ; RAM packet for Print_Str_yx
+                LDB     #menu_music_len         ; Copy count, including $80
+copy_menu_music:
+                LDA     ,X+
+                STA     ,U+
+                DECB
+                BNE     copy_menu_music
                 RTS
 
 launch_hello_world:
@@ -143,17 +176,32 @@ DrawMenu:
                 LDU     #menu_title_packet
                 JSR     Print_Str_yx            ; BIOS print routine
 
+                LDA     #menu_space             ; Clear menu cursors in RAM
+                STA     menu_hello_ram+menu_text_first
+                STA     menu_music_ram+menu_text_first
+                LDA     menu_choice
+                CMPA    #menu_first
+                BNE     mark_music_cursor
+                LDA     #menu_cursor
+                STA     menu_hello_ram+menu_text_first
+                BRA     draw_menu_items
+
+mark_music_cursor:
+                LDA     #menu_cursor
+                STA     menu_music_ram+menu_text_first
+
+draw_menu_items:
                 LDA     menu_choice
                 CMPA    #menu_first
                 BNE     draw_hello_plain
                 JSR     Intensity_7F            ; Highlight selected menu item
-                LDU     #menu_hello_selected
+                LDU     #menu_hello_ram
                 JSR     Print_Str_yx
                 BRA     draw_music_item
 
 draw_hello_plain:
                 JSR     Intensity_3F            ; Dim unselected menu item
-                LDU     #menu_hello_plain
+                LDU     #menu_hello_ram
                 JSR     Print_Str_yx
 
 draw_music_item:
@@ -161,14 +209,14 @@ draw_music_item:
                 CMPA    #menu_second
                 BNE     draw_music_plain
                 JSR     Intensity_7F            ; Highlight selected menu item
-                LDU     #menu_music_selected
+                LDU     #menu_music_ram
                 JSR     Print_Str_yx
                 JSR     DrawMenuHelp
                 RTS
 
 draw_music_plain:
                 JSR     Intensity_3F            ; Dim unselected menu item
-                LDU     #menu_music_plain
+                LDU     #menu_music_ram
                 JSR     Print_Str_yx
                 JSR     DrawMenuHelp
                 RTS
@@ -192,22 +240,16 @@ menu_title_packet:
                 FCB     $50,-$38                ; menu title Y, X position
                 FCC     "VECTREX DEMOS"
                 FCB     $80                     ; $80 is end of string
-menu_hello_selected:
-                FCB     $10,-$50                ; first menu entry position
-                FCC     "> HELLO WORLD !"
-                FCB     $80                     ; $80 is end of string
-menu_hello_plain:
+menu_hello_template:
                 FCB     $10,-$50                ; first menu entry position
                 FCC     "  HELLO WORLD !"
                 FCB     $80                     ; $80 is end of string
-menu_music_selected:
-                FCB     -$10,-$50               ; second menu entry position
-                FCC     "> MUSIC"
-                FCB     $80                     ; $80 is end of string
-menu_music_plain:
+menu_hello_template_end:
+menu_music_template:
                 FCB     -$10,-$50               ; second menu entry position
                 FCC     "  MUSIC"
                 FCB     $80                     ; $80 is end of string
+menu_music_template_end:
 menu_help_run_packet:
                 FCB     -$50,-$78               ; help text below menu entries
                 FCC     "BUTTON 1 TO RUN"
