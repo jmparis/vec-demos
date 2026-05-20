@@ -50,8 +50,13 @@ $(ROM): $(SRC) $(SRC_DEPS)
 	$(ASM) -f raw -o $(ROM) $(SRC)
 #	objcopy -I srec -O binary --gap-fill 0xFF build/$(PRJ).srec $(ROM)
 
-test:
+test: test_python test_6809
+
+test_python:
 	python3 tests/test_engine3d.py
+
+test_6809:
+	python3 tests/test_engine3d_6809.py
 
 run: run_mame
 
@@ -82,10 +87,12 @@ usage:
 	@printf "  $(GREEN)make run_mame$(RESET)      Run with MAME\n"
 	@printf "  $(GREEN)make run_retroarch$(RESET) Run with RetroArch\n"
 	@printf "  $(GREEN)make run_jsvecx$(RESET)    Run with JSVecX in browser\n"
-	@printf "  $(GREEN)make test$(RESET)          Run unit tests\n"
+	@printf "  $(GREEN)make test$(RESET)          Run all unit tests\n"
+	@printf "  $(GREEN)make test_python$(RESET)   Run Python reference tests\n"
+	@printf "  $(GREEN)make test_6809$(RESET)     Run assembled 6809 engine tests\n"
 	@printf "  $(GREEN)make clean$(RESET)         Remove build artifacts\n"
 
-.PHONY: all test run run_mame run_retroarch run_jsvecx help usage clean
+.PHONY: all test test_python test_6809 run run_mame run_retroarch run_jsvecx help usage clean
 
 clean:
 	rm -rf build
