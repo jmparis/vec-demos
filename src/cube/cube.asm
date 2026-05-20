@@ -23,38 +23,68 @@ InitCubeDemo:
                 STA     CUBE_ANIM_COUNTER
                 CLRA
                 STA     CUBE_FRAME_INDEX
+                LDA     #1
+                STA     Vec_Joy_Mux_1_X         ; BIOS Joy_Digital reads stick 1 X axis
                 RTS
 
 cube_loop:
                 JSR     Wait_Recal              ; Vectrex BIOS recalibration
                 JSR     Read_Btns               ; BIOS updates button state RAM
+                JSR     Joy_Digital             ; BIOS updates joystick direction RAM
                 LDA     Vec_Button_1_2          ; Button 2 returns to main menu
                 LBNE    return_to_menu
-                JSR     UpdateCubeAnimation     ; Advance the projected cube angle
+                JSR     UpdateCubeAnimation     ; Joystick controls cube angle
                 JSR     Intensity_5F            ; BIOS beam intensity for cube
                 JSR     DrawCube                ; Draw projected 3D wire cube
                 BRA     cube_loop
 
 ; ---------------------------------------------------------------------------
 ; UpdateCubeAnimation
-; Uses a small RAM divider so the cube rotates at a readable speed. The draw
-; routine then selects a precomputed projection table for the current angle.
+; Uses controller 1 X axis to choose the cube rotation direction. The RAM
+; divider keeps held joystick input readable instead of stepping every frame.
 ; ---------------------------------------------------------------------------
 UpdateCubeAnimation:
+                LDA     Vec_Joy_1_X             ; Signed digital X from BIOS RAM
+                BEQ     StopCubeRotation
+                PSHS    A                       ; Preserve left/right direction
                 DEC     CUBE_ANIM_COUNTER
-                BNE     UpdateCubeAnimationDone
+                BNE     KeepCubeFrame
                 LDA     #CUBE_FRAME_DELAY
                 STA     CUBE_ANIM_COUNTER
+                PULS    A
+                TSTA
+                BMI     RotateCubeLeft          ; Negative X rotates backward
+
+RotateCubeRight:
                 LDA     CUBE_FRAME_INDEX
                 INCA
                 CMPA    #CUBE_FRAME_COUNT
                 BLO     StoreCubeFrame
                 CLRA
+                BRA     StoreCubeFrame
+
+RotateCubeLeft:
+                LDA     CUBE_FRAME_INDEX
+                BNE     PreviousCubeFrame
+                LDA     #CUBE_FRAME_COUNT-1
+                BRA     StoreCubeFrame
+
+PreviousCubeFrame:
+                DECA
 
 StoreCubeFrame:
                 STA     CUBE_FRAME_INDEX
+                RTS
+
+KeepCubeFrame:
+                PULS    A
 
 UpdateCubeAnimationDone:
+                RTS
+
+StopCubeRotation:
+                LDA     #CUBE_FRAME_DELAY       ; Neutral stick: keep current angle
+                STA     CUBE_ANIM_COUNTER
                 RTS
 
 ; ---------------------------------------------------------------------------
