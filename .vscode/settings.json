@@ -19,6 +19,8 @@
         "titleBar.inactiveForeground": "#e7e7e799"
     },
     "peacock.color": "#423343",
+    "editor.semanticHighlighting.enabled": true,
+    "indentRainbow.enabled": true,
     "6x09Assembly.lwasm.arguments": "--6809",
     "6x09Assembly.lwasm.path.linux": "~/.local/bin/lwasm",
     "6x09Assembly.xroar.path.linux": "/usr/bin/xroar"

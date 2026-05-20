@@ -4,8 +4,16 @@
 			"path": "."
 		}
     ],
+    "extensions": {
+        "recommendations": [
+            "oderwat.indent-rainbow",
+            "blairleduc.6x09-assembly"
+        ]
+    },
     "settings": {
         "makefile.configureOnOpen": false,
+        "editor.semanticHighlighting.enabled": true,
+        "indentRainbow.enabled": true,
         "workbench.colorCustomizations": {
             "activityBar.activeBackground": "#cebcf3",
             "activityBar.background": "#cebcf3",
