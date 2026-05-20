@@ -2,3 +2,4 @@ build/*.bin
 build/carre.srec
 build/hello.srec
 tools/jsvecx/
+tests/__pycache__/
