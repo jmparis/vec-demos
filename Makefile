@@ -14,6 +14,10 @@ ROM=$(BUILDDIR)/$(PRJ).bin
 
 ASM=lwasm
 
+CONTAINER_ENGINE?=podman
+TEST_CONTAINER_IMAGE?=vec-demos-6809-test
+TEST_CONTAINERFILE=tools/containers/6809-test/Containerfile
+
 EMU_MAME=mame
 EMU_RETROARCH=flatpak run org.libretro.RetroArch
 CORE=$(HOME)/.var/app/org.libretro.RetroArch/config/retroarch/cores/vecx_libretro.so
@@ -58,6 +62,12 @@ test_python:
 test_6809:
 	python3 tests/test_engine3d_6809.py
 
+container_test_image:
+	$(CONTAINER_ENGINE) build -t $(TEST_CONTAINER_IMAGE) -f $(TEST_CONTAINERFILE) .
+
+test_container:
+	$(CONTAINER_ENGINE) run --rm -v "$(CURDIR):/work:Z" -w /work $(TEST_CONTAINER_IMAGE) make test
+
 run: run_mame
 
 run_mame: $(ROM)
@@ -90,9 +100,11 @@ usage:
 	@printf "  $(GREEN)make test$(RESET)          Run all unit tests\n"
 	@printf "  $(GREEN)make test_python$(RESET)   Run Python reference tests\n"
 	@printf "  $(GREEN)make test_6809$(RESET)     Run assembled 6809 engine tests\n"
+	@printf "  $(GREEN)make container_test_image$(RESET) Build the Fedora test container\n"
+	@printf "  $(GREEN)make test_container$(RESET) Run tests in the Fedora container\n"
 	@printf "  $(GREEN)make clean$(RESET)         Remove build artifacts\n"
 
-.PHONY: all test test_python test_6809 run run_mame run_retroarch run_jsvecx help usage clean
+.PHONY: all test test_python test_6809 container_test_image test_container run run_mame run_retroarch run_jsvecx help usage clean
 
 clean:
 	rm -rf build

@@ -1,0 +1,11 @@
+FROM fedora:latest
+
+RUN dnf -y install \
+        lwtools \
+        make \
+        python3 \
+    && dnf clean all
+
+WORKDIR /work
+
+CMD ["make", "test"]
