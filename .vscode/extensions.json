@@ -1,6 +1,8 @@
 {
     "recommendations": [
+        "ms-vscode.makefile-tools",
         "oderwat.indent-rainbow",
-        "blairleduc.6x09-assembly"
+        "blairleduc.6x09-assembly",
+        "johnpapa.vscode-peacock"
     ]
 }
