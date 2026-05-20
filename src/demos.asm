@@ -12,14 +12,17 @@ menu_joy_lock   EQU     $C8C1                   ; user RAM: joystick debounce fl
 menu_launch     EQU     $C8C2                   ; user RAM: requested menu launch
 menu_hello_ram  EQU     $C8D0                   ; user RAM: Hello menu text packet
 menu_music_ram  EQU     $C8E8                   ; user RAM: Music menu text packet
+menu_cube_ram   EQU     $C900                   ; user RAM: Cube menu text packet
 menu_first      EQU     0                       ; menu index: Hello World demo
 menu_second     EQU     1                       ; menu index: Music demo
+menu_third      EQU     2                       ; menu index: Cube demo
 menu_no_launch  EQU     $FF                     ; no menu entry requested
 menu_text_first EQU     2                       ; text starts after Y, X bytes
 menu_cursor     EQU     $3E                     ; '>' cursor character
 menu_space      EQU     $20                     ; space character
 menu_hello_len  EQU     18                      ; Y, X, 15 chars, $80
 menu_music_len  EQU     10                      ; Y, X, 7 chars, $80
+menu_cube_len   EQU     9                       ; Y, X, 6 chars, $80
 
 ; start of vectrex memory with cartridge name...
                 ORG     $0
@@ -52,6 +55,8 @@ menu_loop:
                 BEQ     launch_hello_world
                 CMPA    #menu_second
                 BEQ     launch_music_demo
+                CMPA    #menu_third
+                BEQ     launch_cube_demo
                 LDA     #menu_no_launch         ; Unknown entry: keep menu open
                 STA     menu_launch
                 JSR     DrawMenu                ; Draw menu every frame
@@ -103,6 +108,15 @@ copy_menu_music:
                 STA     ,U+
                 DECB
                 BNE     copy_menu_music
+
+                LDX     #menu_cube_template     ; ROM source: Y, X, string
+                LDU     #menu_cube_ram          ; RAM packet for Print_Str_yx
+                LDB     #menu_cube_len          ; Copy count, including $80
+copy_menu_cube:
+                LDA     ,X+
+                STA     ,U+
+                DECB
+                BNE     copy_menu_cube
                 RTS
 
 launch_hello_world:
@@ -112,6 +126,10 @@ launch_hello_world:
 launch_music_demo:
                 JSR     InitMusicDemo
                 LBRA    music_demo_loop
+
+launch_cube_demo:
+                JSR     InitCubeDemo
+                LBRA    cube_loop
 
 ; ---------------------------------------------------------------------------
 ; UpdateMenuInput
@@ -141,7 +159,7 @@ check_joy_lock:
 
 select_next:
                 LDA     menu_choice
-                CMPA    #menu_second
+                CMPA    #menu_third
                 BEQ     select_first
                 INCA
                 STA     menu_choice
@@ -155,13 +173,18 @@ select_first:
 select_previous:
                 LDA     menu_choice
                 CMPA    #menu_first
-                BEQ     select_second
+                BEQ     select_third
                 DECA
                 STA     menu_choice
                 RTS
 
 select_second:
                 LDA     #menu_second
+                STA     menu_choice
+                RTS
+
+select_third:
+                LDA     #menu_third
                 STA     menu_choice
 update_menu_done:
                 RTS
@@ -179,16 +202,25 @@ DrawMenu:
                 LDA     #menu_space             ; Clear menu cursors in RAM
                 STA     menu_hello_ram+menu_text_first
                 STA     menu_music_ram+menu_text_first
+                STA     menu_cube_ram+menu_text_first
                 LDA     menu_choice
                 CMPA    #menu_first
-                BNE     mark_music_cursor
+                BNE     check_music_cursor
                 LDA     #menu_cursor
                 STA     menu_hello_ram+menu_text_first
                 BRA     draw_menu_items
 
+check_music_cursor:
+                CMPA    #menu_second
+                BNE     mark_cube_cursor
 mark_music_cursor:
                 LDA     #menu_cursor
                 STA     menu_music_ram+menu_text_first
+                BRA     draw_menu_items
+
+mark_cube_cursor:
+                LDA     #menu_cursor
+                STA     menu_cube_ram+menu_text_first
 
 draw_menu_items:
                 LDA     menu_choice
@@ -211,12 +243,26 @@ draw_music_item:
                 JSR     Intensity_7F            ; Highlight selected menu item
                 LDU     #menu_music_ram
                 JSR     Print_Str_yx
-                JSR     DrawMenuHelp
-                RTS
+                BRA     draw_cube_item
 
 draw_music_plain:
                 JSR     Intensity_3F            ; Dim unselected menu item
                 LDU     #menu_music_ram
+                JSR     Print_Str_yx
+
+draw_cube_item:
+                LDA     menu_choice
+                CMPA    #menu_third
+                BNE     draw_cube_plain
+                JSR     Intensity_7F            ; Highlight selected menu item
+                LDU     #menu_cube_ram
+                JSR     Print_Str_yx
+                JSR     DrawMenuHelp
+                RTS
+
+draw_cube_plain:
+                JSR     Intensity_3F            ; Dim unselected menu item
+                LDU     #menu_cube_ram
                 JSR     Print_Str_yx
                 JSR     DrawMenuHelp
                 RTS
@@ -250,6 +296,11 @@ menu_music_template:
                 FCC     "  MUSIC"
                 FCB     $80                     ; $80 is end of string
 menu_music_template_end:
+menu_cube_template:
+                FCB     -$30,-$50               ; third menu entry position
+                FCC     "  CUBE"
+                FCB     $80                     ; $80 is end of string
+menu_cube_template_end:
 menu_help_run_packet:
                 FCB     -$50,-$78               ; help text below menu entries
                 FCC     "BUTTON 1 TO RUN"
@@ -261,6 +312,7 @@ menu_help_exit_packet:
 
                 INCLUDE "hello/hello.asm"
                 INCLUDE "music/music.asm"
+                INCLUDE "cube/cube.asm"
 
 ;***************************************************************************
                 END     main
