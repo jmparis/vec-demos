@@ -6,25 +6,48 @@
 ; DEFINE SECTION
 ;***************************************************************************
 CUBE_EDGE_COUNT EQU     12                      ; 12 edges in a wireframe cube
-CUBE_FRAME_COUNT EQU    16                      ; Precomputed rotation steps
-CUBE_FRAME_DELAY EQU    6                       ; Frames between rotation steps
-CUBE_ANIM_COUNTER EQU   $C910                   ; user RAM: animation divider
-CUBE_FRAME_INDEX EQU    $C911                   ; user RAM: current cube angle
+CUBE_VERTEX_COUNT EQU   8                       ; 8 vertices in a cube
+CUBE_VERTEX_SIZE EQU    3                       ; X, Y, Z bytes per vertex
+CUBE_VERTEX_BYTES EQU   CUBE_VERTEX_COUNT*CUBE_VERTEX_SIZE
+CUBE_ROT_DELAY EQU      1                       ; Joystick-held rotation divider
+CUBE_VERTEX_RAM EQU     $C910                   ; user RAM: 8 signed XYZ vertices
+CUBE_ROT_COUNTER EQU    $C928                   ; user RAM: rotation speed divider
+CUBE_START_Y EQU        $C929                   ; user RAM: projected edge start Y
+CUBE_START_X EQU        $C92A                   ; user RAM: projected edge start X
+CUBE_DELTA_Y EQU        $C92B                   ; user RAM: projected edge delta Y
+CUBE_DELTA_X EQU        $C92C                   ; user RAM: projected edge delta X
+CUBE_PROJ_Y EQU         $C92D                   ; user RAM: projected vertex Y
+CUBE_PROJ_X EQU         $C92E                   ; user RAM: projected vertex X
+CUBE_TEMP_X EQU         $C92F                   ; user RAM: rotation scratch X
+CUBE_TEMP_Y EQU         $C930                   ; user RAM: rotation scratch Y
+CUBE_TEMP_Z EQU         $C931                   ; user RAM: rotation scratch Z
+CUBE_TEMP_STEP EQU      $C932                   ; user RAM: signed small-angle term
 
 ;***************************************************************************
 ; CODE SECTION
 ;***************************************************************************
 ; ---------------------------------------------------------------------------
 ; InitCubeDemo
-; Resets the frame divider and starts the cube rotation from the first angle.
+; Copies the cube vertices to RAM. The cube is centered on origin (0,0,0), so
+; every rotation below is naturally around its center.
 ; ---------------------------------------------------------------------------
 InitCubeDemo:
-                LDA     #CUBE_FRAME_DELAY
-                STA     CUBE_ANIM_COUNTER
-                CLRA
-                STA     CUBE_FRAME_INDEX
+                LDX     #CubeVertexTemplate     ; ROM source: signed X,Y,Z
+                LDU     #CUBE_VERTEX_RAM        ; RAM copy mutated by rotations
+                LDB     #CUBE_VERTEX_BYTES
+
+CopyCubeVertex:
+                LDA     ,X+
+                STA     ,U+
+                DECB
+                BNE     CopyCubeVertex
+
+                LDA     #CUBE_ROT_DELAY
+                STA     CUBE_ROT_COUNTER
                 LDA     #1
-                STA     Vec_Joy_Mux_1_X         ; BIOS Joy_Digital reads stick 1 X axis
+                STA     Vec_Joy_Mux_1_X         ; BIOS Joy_Digital reads stick 1 X
+                LDA     #3
+                STA     Vec_Joy_Mux_1_Y         ; BIOS Joy_Digital reads stick 1 Y
                 RTS
 
 cube_loop:
@@ -33,335 +56,262 @@ cube_loop:
                 JSR     Joy_Digital             ; BIOS updates joystick direction RAM
                 LDA     Vec_Button_1_2          ; Button 2 returns to main menu
                 LBNE    return_to_menu
-                JSR     UpdateCubeAnimation     ; Joystick controls cube angle
+                JSR     UpdateCubeRotation      ; Joystick rotates 3D vertices
                 JSR     Intensity_5F            ; BIOS beam intensity for cube
                 JSR     DrawCube                ; Draw projected 3D wire cube
                 BRA     cube_loop
 
 ; ---------------------------------------------------------------------------
-; UpdateCubeAnimation
-; Uses controller 1 X axis to choose the cube rotation direction. The RAM
-; divider keeps held joystick input readable instead of stepping every frame.
+; UpdateCubeRotation
+; Left/right rotates around the Y axis. Up/down rotates around the X axis.
+; The cube coordinates are signed bytes centered on (0,0,0), and each update
+; applies a tiny shift-based rotation approximation to all vertices.
 ; ---------------------------------------------------------------------------
-UpdateCubeAnimation:
+UpdateCubeRotation:
                 LDA     Vec_Joy_1_X             ; Signed digital X from BIOS RAM
-                BEQ     StopCubeRotation
-                PSHS    A                       ; Preserve left/right direction
-                DEC     CUBE_ANIM_COUNTER
-                BNE     KeepCubeFrame
-                LDA     #CUBE_FRAME_DELAY
-                STA     CUBE_ANIM_COUNTER
-                PULS    A
-                TSTA
-                BMI     RotateCubeLeft          ; Negative X rotates backward
+                BNE     CubeRotationInput
+                LDA     Vec_Joy_1_Y             ; Signed digital Y from BIOS RAM
+                BNE     CubeRotationInput
+                LDA     #CUBE_ROT_DELAY         ; Neutral stick: hold current angle
+                STA     CUBE_ROT_COUNTER
+                RTS
 
-RotateCubeRight:
-                LDA     CUBE_FRAME_INDEX
-                INCA
-                CMPA    #CUBE_FRAME_COUNT
-                BLO     StoreCubeFrame
-                CLRA
-                BRA     StoreCubeFrame
+CubeRotationInput:
+                DEC     CUBE_ROT_COUNTER
+                BNE     CubeRotationDone
+                LDA     #CUBE_ROT_DELAY
+                STA     CUBE_ROT_COUNTER
+
+                LDA     Vec_Joy_1_X
+                BEQ     CheckCubePitch
+                BMI     RotateCubeLeft
+                JSR     RotateCubeRight
+                BRA     CheckCubePitch
 
 RotateCubeLeft:
-                LDA     CUBE_FRAME_INDEX
-                BNE     PreviousCubeFrame
-                LDA     #CUBE_FRAME_COUNT-1
-                BRA     StoreCubeFrame
+                JSR     RotateCubeLeftStep
 
-PreviousCubeFrame:
-                DECA
-
-StoreCubeFrame:
-                STA     CUBE_FRAME_INDEX
+CheckCubePitch:
+                LDA     Vec_Joy_1_Y
+                BEQ     CubeRotationDone
+                BMI     RotateCubeDown          ; Negative Y pitches downward
+                JSR     RotateCubeUp
                 RTS
 
-KeepCubeFrame:
-                PULS    A
+RotateCubeDown:
+                JSR     RotateCubeDownStep
 
-UpdateCubeAnimationDone:
+CubeRotationDone:
                 RTS
 
-StopCubeRotation:
-                LDA     #CUBE_FRAME_DELAY       ; Neutral stick: keep current angle
-                STA     CUBE_ANIM_COUNTER
+; ---------------------------------------------------------------------------
+; RotateCubeRight / RotateCubeLeftStep
+; Horizontal yaw around the origin Y axis:
+;   right: x' = x + z/8, z' = z - x'/8
+;   left:  x' = x - z/8, z' = z + x'/8
+; The second step uses the newly updated X value. That keeps the incremental
+; rotation bounded instead of adding a small scale factor on every joystick step.
+; ---------------------------------------------------------------------------
+RotateCubeRight:
+                LDX     #CUBE_VERTEX_RAM
+                LDB     #CUBE_VERTEX_COUNT
+
+RotateCubeRightLoop:
+                LDA     ,X                      ; Current vertex X
+                STA     CUBE_TEMP_X
+                LDA     2,X                     ; Current vertex Z
+                STA     CUBE_TEMP_Z
+                JSR     SignedDiv8
+                ADDA    CUBE_TEMP_X
+                STA     ,X                      ; Store rotated X
+                JSR     SignedDiv8              ; Use new X for stable rotation
+                STA     CUBE_TEMP_STEP
+                LDA     CUBE_TEMP_Z
+                SUBA    CUBE_TEMP_STEP
+                STA     2,X                     ; Store rotated Z
+                LEAX    CUBE_VERTEX_SIZE,X
+                DECB
+                BNE     RotateCubeRightLoop
+                RTS
+
+RotateCubeLeftStep:
+                LDX     #CUBE_VERTEX_RAM
+                LDB     #CUBE_VERTEX_COUNT
+
+RotateCubeLeftLoop:
+                LDA     ,X                      ; Current vertex X
+                STA     CUBE_TEMP_X
+                LDA     2,X                     ; Current vertex Z
+                STA     CUBE_TEMP_Z
+                JSR     SignedDiv8
+                STA     CUBE_TEMP_STEP
+                LDA     CUBE_TEMP_X
+                SUBA    CUBE_TEMP_STEP
+                STA     ,X                      ; Store rotated X
+                JSR     SignedDiv8              ; Use new X for stable rotation
+                ADDA    CUBE_TEMP_Z
+                STA     2,X                     ; Store rotated Z
+                LEAX    CUBE_VERTEX_SIZE,X
+                DECB
+                BNE     RotateCubeLeftLoop
+                RTS
+
+; ---------------------------------------------------------------------------
+; RotateCubeUp / RotateCubeDownStep
+; Vertical pitch around the origin X axis:
+;   up:   y' = y + z/8, z' = z - y'/8
+;   down: y' = y - z/8, z' = z + y'/8
+; ---------------------------------------------------------------------------
+RotateCubeUp:
+                LDX     #CUBE_VERTEX_RAM
+                LDB     #CUBE_VERTEX_COUNT
+
+RotateCubeUpLoop:
+                LDA     1,X                     ; Current vertex Y
+                STA     CUBE_TEMP_Y
+                LDA     2,X                     ; Current vertex Z
+                STA     CUBE_TEMP_Z
+                JSR     SignedDiv8
+                ADDA    CUBE_TEMP_Y
+                STA     1,X                     ; Store rotated Y
+                JSR     SignedDiv8              ; Use new Y for stable rotation
+                STA     CUBE_TEMP_STEP
+                LDA     CUBE_TEMP_Z
+                SUBA    CUBE_TEMP_STEP
+                STA     2,X                     ; Store rotated Z
+                LEAX    CUBE_VERTEX_SIZE,X
+                DECB
+                BNE     RotateCubeUpLoop
+                RTS
+
+RotateCubeDownStep:
+                LDX     #CUBE_VERTEX_RAM
+                LDB     #CUBE_VERTEX_COUNT
+
+RotateCubeDownLoop:
+                LDA     1,X                     ; Current vertex Y
+                STA     CUBE_TEMP_Y
+                LDA     2,X                     ; Current vertex Z
+                STA     CUBE_TEMP_Z
+                JSR     SignedDiv8
+                STA     CUBE_TEMP_STEP
+                LDA     CUBE_TEMP_Y
+                SUBA    CUBE_TEMP_STEP
+                STA     1,X                     ; Store rotated Y
+                JSR     SignedDiv8              ; Use new Y for stable rotation
+                ADDA    CUBE_TEMP_Z
+                STA     2,X                     ; Store rotated Z
+                LEAX    CUBE_VERTEX_SIZE,X
+                DECB
+                BNE     RotateCubeDownLoop
+                RTS
+
+; ---------------------------------------------------------------------------
+; SignedDiv8
+; Divides signed A by 8 using arithmetic shifts. This is the small-angle term
+; used by the rotation approximation above.
+; ---------------------------------------------------------------------------
+SignedDiv8:
+                ASRA
+                ASRA
+                ASRA
                 RTS
 
 ; ---------------------------------------------------------------------------
 ; DrawCube
-; Draws the current wireframe cube frame. Each edge stores a start point and a
-; line delta in projected 2D coordinates: start Y, start X, delta Y, delta X.
+; Projects each 3D edge endpoint to 2D and draws the resulting vector. The
+; projection is intentionally simple for Vectrex hardware:
+;   screen X = x + z/2
+;   screen Y = y + z/2
 ; ---------------------------------------------------------------------------
 DrawCube:
                 JSR     DP_to_D0                ; Restore DP for VIA/BIOS draw
-                LDA     CUBE_FRAME_INDEX
-                ASLA                            ; Word offset in frame pointer table
-                LDX     #cube_frame_table
-                LEAX    A,X
-                LDX     ,X                      ; Projection table for angle
+                LDX     #CubeEdgeTable          ; Edge endpoint indices
                 LDA     #CUBE_EDGE_COUNT        ; Edge loop counter
 
-draw_cube_edge:
+DrawCubeEdge:
                 PSHS    A                       ; Preserve remaining edge count
                 PSHS    X                       ; Preserve edge table pointer
                 JSR     Reset0Ref               ; Draw each edge from true origin
                 PULS    X
-                LDA     ,X+                     ; Edge start Y
-                LDB     ,X+                     ; Edge start X
-                PSHS    X                       ; Preserve pointer to edge delta
-                JSR     Moveto_d_7F             ; BIOS move to edge start
+
+                LDA     ,X+                     ; Start vertex index
+                PSHS    X
+                JSR     ProjectCubeVertex       ; Convert signed XYZ to Y/X
                 PULS    X
-                LDA     ,X+                     ; Edge delta Y
-                LDB     ,X+                     ; Edge delta X
-                PSHS    X                       ; Preserve pointer to next edge
-                JSR     Draw_Line_d             ; BIOS draw edge from start point
+                LDA     CUBE_PROJ_Y
+                STA     CUBE_START_Y
+                LDA     CUBE_PROJ_X
+                STA     CUBE_START_X
+
+                LDA     ,X+                     ; End vertex index
+                PSHS    X
+                JSR     ProjectCubeVertex       ; Convert signed XYZ to Y/X
+                PULS    X
+                LDA     CUBE_PROJ_Y
+                SUBA    CUBE_START_Y
+                STA     CUBE_DELTA_Y
+                LDA     CUBE_PROJ_X
+                SUBA    CUBE_START_X
+                STA     CUBE_DELTA_X
+
+                LDA     CUBE_START_Y
+                LDB     CUBE_START_X
+                PSHS    X
+                JSR     Moveto_d_7F             ; BIOS move to edge start
+                LDA     CUBE_DELTA_Y
+                LDB     CUBE_DELTA_X
+                JSR     Draw_Line_d             ; BIOS draw projected edge
                 PULS    X
                 PULS    A
                 DECA
-                BNE     draw_cube_edge
+                BNE     DrawCubeEdge
+                RTS
+
+; ---------------------------------------------------------------------------
+; ProjectCubeVertex
+; Input: A = vertex index. Output: CUBE_PROJ_Y / CUBE_PROJ_X.
+; ---------------------------------------------------------------------------
+ProjectCubeVertex:
+                LDB     #CUBE_VERTEX_SIZE
+                MUL                             ; D = vertex index * 3
+                LDX     #CUBE_VERTEX_RAM
+                ABX                             ; X points to selected XYZ vertex
+
+                LDA     2,X                     ; Z contributes perspective depth
+                ASRA                            ; z/2, signed
+                STA     CUBE_TEMP_Z
+                LDA     ,X                      ; Projected X = x + z/2
+                ADDA    CUBE_TEMP_Z
+                STA     CUBE_PROJ_X
+                LDA     1,X                     ; Projected Y = y + z/2
+                ADDA    CUBE_TEMP_Z
+                STA     CUBE_PROJ_Y
                 RTS
 
 ;***************************************************************************
 ; DATA SECTION
 ;***************************************************************************
-cube_frame_table:
-                FDB     CubeFrame0              ; 0 degrees around vertical axis
-                FDB     CubeFrame1              ; 22 degrees around vertical axis
-                FDB     CubeFrame2              ; 45 degrees around vertical axis
-                FDB     CubeFrame3              ; 67 degrees around vertical axis
-                FDB     CubeFrame4              ; 90 degrees around vertical axis
-                FDB     CubeFrame5              ; 112 degrees around vertical axis
-                FDB     CubeFrame6              ; 135 degrees around vertical axis
-                FDB     CubeFrame7              ; 157 degrees around vertical axis
-                FDB     CubeFrame8              ; 180 degrees around vertical axis
-                FDB     CubeFrame9              ; 202 degrees around vertical axis
-                FDB     CubeFrame10             ; 225 degrees around vertical axis
-                FDB     CubeFrame11             ; 247 degrees around vertical axis
-                FDB     CubeFrame12             ; 270 degrees around vertical axis
-                FDB     CubeFrame13             ; 292 degrees around vertical axis
-                FDB     CubeFrame14             ; 315 degrees around vertical axis
-                FDB     CubeFrame15             ; 337 degrees around vertical axis
+CubeVertexTemplate:
+                FCB     -32,32,-32              ; vertex 0: left, top, front
+                FCB     32,32,-32               ; vertex 1: right, top, front
+                FCB     32,-32,-32              ; vertex 2: right, bottom, front
+                FCB     -32,-32,-32             ; vertex 3: left, bottom, front
+                FCB     -32,32,32               ; vertex 4: left, top, back
+                FCB     32,32,32                ; vertex 5: right, top, back
+                FCB     32,-32,32               ; vertex 6: right, bottom, back
+                FCB     -32,-32,32              ; vertex 7: left, bottom, back
 
-CubeFrame0:
-                FCB     17,-43,0,60             ; front top edge
-                FCB     17,17,-60,0             ; front right edge
-                FCB     -43,17,0,-60            ; front bottom edge
-                FCB     -43,-43,60,0            ; front left edge
-                FCB     43,-17,0,60             ; back top edge
-                FCB     43,43,-60,0             ; back right edge
-                FCB     -17,43,0,-60            ; back bottom edge
-                FCB     -17,-17,60,0            ; back left edge
-                FCB     17,-43,26,26            ; top-left depth edge
-                FCB     17,17,26,26             ; top-right depth edge
-                FCB     -43,17,26,26            ; bottom-right depth edge
-                FCB     -43,-43,26,26           ; bottom-left depth edge
-
-CubeFrame1:
-                FCB     23,-46,-10,45           ; front top edge
-                FCB     13,-1,-60,0             ; front right edge
-                FCB     -47,-1,10,-45           ; front bottom edge
-                FCB     -37,-46,60,0            ; front left edge
-                FCB     47,1,-10,45             ; back top edge
-                FCB     37,46,-60,0             ; back right edge
-                FCB     -23,46,10,-45           ; back bottom edge
-                FCB     -13,1,60,0              ; back left edge
-                FCB     23,-46,24,47            ; top-left depth edge
-                FCB     13,-1,24,47             ; top-right depth edge
-                FCB     -47,-1,24,47            ; bottom-right depth edge
-                FCB     -37,-46,24,47           ; bottom-left depth edge
-
-CubeFrame2:
-                FCB     30,-42,-18,24           ; front top edge
-                FCB     12,-18,-60,0            ; front right edge
-                FCB     -48,-18,18,-24          ; front bottom edge
-                FCB     -30,-42,60,0            ; front left edge
-                FCB     48,18,-18,24            ; back top edge
-                FCB     30,42,-60,0             ; back right edge
-                FCB     -30,42,18,-24           ; back bottom edge
-                FCB     -12,18,60,0             ; back left edge
-                FCB     30,-42,18,60            ; top-left depth edge
-                FCB     12,-18,18,60            ; top-right depth edge
-                FCB     -48,-18,18,60           ; bottom-right depth edge
-                FCB     -30,-42,18,60           ; bottom-left depth edge
-
-CubeFrame3:
-                FCB     37,-32,-24,-1           ; front top edge
-                FCB     13,-33,-60,0            ; front right edge
-                FCB     -47,-33,24,1            ; front bottom edge
-                FCB     -23,-32,60,0            ; front left edge
-                FCB     47,33,-24,-1            ; back top edge
-                FCB     23,32,-60,0             ; back right edge
-                FCB     -37,32,24,1             ; back bottom edge
-                FCB     -13,33,60,0             ; back left edge
-                FCB     37,-32,10,65            ; top-left depth edge
-                FCB     13,-33,10,65            ; top-right depth edge
-                FCB     -47,-33,10,65           ; bottom-right depth edge
-                FCB     -23,-32,10,65           ; bottom-left depth edge
-
-CubeFrame4:
-                FCB     43,-17,-26,-26          ; front top edge
-                FCB     17,-43,-60,0            ; front right edge
-                FCB     -43,-43,26,26           ; front bottom edge
-                FCB     -17,-17,60,0            ; front left edge
-                FCB     43,43,-26,-26           ; back top edge
-                FCB     17,17,-60,0             ; back right edge
-                FCB     -43,17,26,26            ; back bottom edge
-                FCB     -17,43,60,0             ; back left edge
-                FCB     43,-17,0,60             ; top-left depth edge
-                FCB     17,-43,0,60             ; top-right depth edge
-                FCB     -43,-43,0,60            ; bottom-right depth edge
-                FCB     -17,-17,0,60            ; bottom-left depth edge
-
-CubeFrame5:
-                FCB     47,1,-24,-47            ; front top edge
-                FCB     23,-46,-60,0            ; front right edge
-                FCB     -37,-46,24,47           ; front bottom edge
-                FCB     -13,1,60,0              ; front left edge
-                FCB     37,46,-24,-47           ; back top edge
-                FCB     13,-1,-60,0             ; back right edge
-                FCB     -47,-1,24,47            ; back bottom edge
-                FCB     -23,46,60,0             ; back left edge
-                FCB     47,1,-10,45             ; top-left depth edge
-                FCB     23,-46,-10,45           ; top-right depth edge
-                FCB     -37,-46,-10,45          ; bottom-right depth edge
-                FCB     -13,1,-10,45            ; bottom-left depth edge
-
-CubeFrame6:
-                FCB     48,18,-18,-60           ; front top edge
-                FCB     30,-42,-60,0            ; front right edge
-                FCB     -30,-42,18,60           ; front bottom edge
-                FCB     -12,18,60,0             ; front left edge
-                FCB     30,42,-18,-60           ; back top edge
-                FCB     12,-18,-60,0            ; back right edge
-                FCB     -48,-18,18,60           ; back bottom edge
-                FCB     -30,42,60,0             ; back left edge
-                FCB     48,18,-18,24            ; top-left depth edge
-                FCB     30,-42,-18,24           ; top-right depth edge
-                FCB     -30,-42,-18,24          ; bottom-right depth edge
-                FCB     -12,18,-18,24           ; bottom-left depth edge
-
-CubeFrame7:
-                FCB     47,33,-10,-65           ; front top edge
-                FCB     37,-32,-60,0            ; front right edge
-                FCB     -23,-32,10,65           ; front bottom edge
-                FCB     -13,33,60,0             ; front left edge
-                FCB     23,32,-10,-65           ; back top edge
-                FCB     13,-33,-60,0            ; back right edge
-                FCB     -47,-33,10,65           ; back bottom edge
-                FCB     -37,32,60,0             ; back left edge
-                FCB     47,33,-24,-1            ; top-left depth edge
-                FCB     37,-32,-24,-1           ; top-right depth edge
-                FCB     -23,-32,-24,-1          ; bottom-right depth edge
-                FCB     -13,33,-24,-1           ; bottom-left depth edge
-
-CubeFrame8:
-                FCB     43,43,0,-60             ; front top edge
-                FCB     43,-17,-60,0            ; front right edge
-                FCB     -17,-17,0,60            ; front bottom edge
-                FCB     -17,43,60,0             ; front left edge
-                FCB     17,17,0,-60             ; back top edge
-                FCB     17,-43,-60,0            ; back right edge
-                FCB     -43,-43,0,60            ; back bottom edge
-                FCB     -43,17,60,0             ; back left edge
-                FCB     43,43,-26,-26           ; top-left depth edge
-                FCB     43,-17,-26,-26          ; top-right depth edge
-                FCB     -17,-17,-26,-26         ; bottom-right depth edge
-                FCB     -17,43,-26,-26          ; bottom-left depth edge
-
-CubeFrame9:
-                FCB     37,46,10,-45            ; front top edge
-                FCB     47,1,-60,0              ; front right edge
-                FCB     -13,1,-10,45            ; front bottom edge
-                FCB     -23,46,60,0             ; front left edge
-                FCB     13,-1,10,-45            ; back top edge
-                FCB     23,-46,-60,0            ; back right edge
-                FCB     -37,-46,-10,45          ; back bottom edge
-                FCB     -47,-1,60,0             ; back left edge
-                FCB     37,46,-24,-47           ; top-left depth edge
-                FCB     47,1,-24,-47            ; top-right depth edge
-                FCB     -13,1,-24,-47           ; bottom-right depth edge
-                FCB     -23,46,-24,-47          ; bottom-left depth edge
-
-CubeFrame10:
-                FCB     30,42,18,-24            ; front top edge
-                FCB     48,18,-60,0             ; front right edge
-                FCB     -12,18,-18,24           ; front bottom edge
-                FCB     -30,42,60,0             ; front left edge
-                FCB     12,-18,18,-24           ; back top edge
-                FCB     30,-42,-60,0            ; back right edge
-                FCB     -30,-42,-18,24          ; back bottom edge
-                FCB     -48,-18,60,0            ; back left edge
-                FCB     30,42,-18,-60           ; top-left depth edge
-                FCB     48,18,-18,-60           ; top-right depth edge
-                FCB     -12,18,-18,-60          ; bottom-right depth edge
-                FCB     -30,42,-18,-60          ; bottom-left depth edge
-
-CubeFrame11:
-                FCB     23,32,24,1              ; front top edge
-                FCB     47,33,-60,0             ; front right edge
-                FCB     -13,33,-24,-1           ; front bottom edge
-                FCB     -37,32,60,0             ; front left edge
-                FCB     13,-33,24,1             ; back top edge
-                FCB     37,-32,-60,0            ; back right edge
-                FCB     -23,-32,-24,-1          ; back bottom edge
-                FCB     -47,-33,60,0            ; back left edge
-                FCB     23,32,-10,-65           ; top-left depth edge
-                FCB     47,33,-10,-65           ; top-right depth edge
-                FCB     -13,33,-10,-65          ; bottom-right depth edge
-                FCB     -37,32,-10,-65          ; bottom-left depth edge
-
-CubeFrame12:
-                FCB     17,17,26,26             ; front top edge
-                FCB     43,43,-60,0             ; front right edge
-                FCB     -17,43,-26,-26          ; front bottom edge
-                FCB     -43,17,60,0             ; front left edge
-                FCB     17,-43,26,26            ; back top edge
-                FCB     43,-17,-60,0            ; back right edge
-                FCB     -17,-17,-26,-26         ; back bottom edge
-                FCB     -43,-43,60,0            ; back left edge
-                FCB     17,17,0,-60             ; top-left depth edge
-                FCB     43,43,0,-60             ; top-right depth edge
-                FCB     -17,43,0,-60            ; bottom-right depth edge
-                FCB     -43,17,0,-60            ; bottom-left depth edge
-
-CubeFrame13:
-                FCB     13,-1,24,47             ; front top edge
-                FCB     37,46,-60,0             ; front right edge
-                FCB     -23,46,-24,-47          ; front bottom edge
-                FCB     -47,-1,60,0             ; front left edge
-                FCB     23,-46,24,47            ; back top edge
-                FCB     47,1,-60,0              ; back right edge
-                FCB     -13,1,-24,-47           ; back bottom edge
-                FCB     -37,-46,60,0            ; back left edge
-                FCB     13,-1,10,-45            ; top-left depth edge
-                FCB     37,46,10,-45            ; top-right depth edge
-                FCB     -23,46,10,-45           ; bottom-right depth edge
-                FCB     -47,-1,10,-45           ; bottom-left depth edge
-
-CubeFrame14:
-                FCB     12,-18,18,60            ; front top edge
-                FCB     30,42,-60,0             ; front right edge
-                FCB     -30,42,-18,-60          ; front bottom edge
-                FCB     -48,-18,60,0            ; front left edge
-                FCB     30,-42,18,60            ; back top edge
-                FCB     48,18,-60,0             ; back right edge
-                FCB     -12,18,-18,-60          ; back bottom edge
-                FCB     -30,-42,60,0            ; back left edge
-                FCB     12,-18,18,-24           ; top-left depth edge
-                FCB     30,42,18,-24            ; top-right depth edge
-                FCB     -30,42,18,-24           ; bottom-right depth edge
-                FCB     -48,-18,18,-24          ; bottom-left depth edge
-
-CubeFrame15:
-                FCB     13,-33,10,65            ; front top edge
-                FCB     23,32,-60,0             ; front right edge
-                FCB     -37,32,-10,-65          ; front bottom edge
-                FCB     -47,-33,60,0            ; front left edge
-                FCB     37,-32,10,65            ; back top edge
-                FCB     47,33,-60,0             ; back right edge
-                FCB     -13,33,-10,-65          ; back bottom edge
-                FCB     -23,-32,60,0            ; back left edge
-                FCB     13,-33,24,1             ; top-left depth edge
-                FCB     23,32,24,1              ; top-right depth edge
-                FCB     -37,32,24,1             ; bottom-right depth edge
-                FCB     -47,-33,24,1            ; bottom-left depth edge
+CubeEdgeTable:
+                FCB     0,1                     ; front top edge
+                FCB     1,2                     ; front right edge
+                FCB     2,3                     ; front bottom edge
+                FCB     3,0                     ; front left edge
+                FCB     4,5                     ; back top edge
+                FCB     5,6                     ; back right edge
+                FCB     6,7                     ; back bottom edge
+                FCB     7,4                     ; back left edge
+                FCB     0,4                     ; top-left depth edge
+                FCB     1,5                     ; top-right depth edge
+                FCB     2,6                     ; bottom-right depth edge
+                FCB     3,7                     ; bottom-left depth edge
