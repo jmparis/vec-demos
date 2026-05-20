@@ -1,8 +1,9 @@
 #PRJ := $(patsubst vec-%,%,$(notdir $(CURDIR)))
-PRJ := hello
+PRJ := demos
 SRCDIR=src
 BUILDDIR=build
 SRC=$(SRCDIR)/$(PRJ).asm
+SRC_DEPS=$(SRCDIR)/hello.asm $(SRCDIR)/music.asm
 ROM=$(BUILDDIR)/$(PRJ).bin
 
 ASM=lwasm
@@ -38,7 +39,7 @@ help: usage
 
 all: $(ROM)
 
-$(ROM): $(SRC)
+$(ROM): $(SRC) $(SRC_DEPS)
 	mkdir -p build
 	$(ASM) -f raw -o $(ROM) $(SRC)
 #	objcopy -I srec -O binary --gap-fill 0xFF build/$(PRJ).srec $(ROM)
