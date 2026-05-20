@@ -3,7 +3,7 @@ PRJ := demos
 SRCDIR=src
 BUILDDIR=build
 SRC=$(SRCDIR)/$(PRJ).asm
-SRC_DEPS=$(SRCDIR)/hello.asm $(SRCDIR)/music.asm
+SRC_DEPS=$(SRCDIR)/hello.asm $(SRCDIR)/music.asm include/music_notes.i
 ROM=$(BUILDDIR)/$(PRJ).bin
 
 ASM=lwasm
