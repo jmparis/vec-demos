@@ -1,9 +1,15 @@
-#PRJ := $(patsubst vec-%,%,$(notdir $(CURDIR)))
-PRJ := demos
+PRJ := $(patsubst vec-%,%,$(notdir $(CURDIR)))
+#PRJ := demos
 SRCDIR=src
 BUILDDIR=build
 SRC=$(SRCDIR)/$(PRJ).asm
-SRC_DEPS=$(SRCDIR)/hello/hello.asm $(SRCDIR)/music/music.asm $(SRCDIR)/music/noel_melody.asm $(SRCDIR)/cube/cube.asm include/music_notes.i
+SRC_DEPS=\
+		$(SRCDIR)/hello/hello.asm		\
+		$(SRCDIR)/music/music.asm 		\
+		$(SRCDIR)/music/noel_melody.asm \
+		$(SRCDIR)/cube/cube.asm 		\
+		$(SRCDIR)/cube/engine3d.asm 	\
+		include/music_notes.i
 ROM=$(BUILDDIR)/$(PRJ).bin
 
 ASM=lwasm
@@ -44,6 +50,9 @@ $(ROM): $(SRC) $(SRC_DEPS)
 	$(ASM) -f raw -o $(ROM) $(SRC)
 #	objcopy -I srec -O binary --gap-fill 0xFF build/$(PRJ).srec $(ROM)
 
+test:
+	python3 tests/test_engine3d.py
+
 run: run_mame
 
 run_mame: $(ROM)
@@ -73,9 +82,10 @@ usage:
 	@printf "  $(GREEN)make run_mame$(RESET)      Run with MAME\n"
 	@printf "  $(GREEN)make run_retroarch$(RESET) Run with RetroArch\n"
 	@printf "  $(GREEN)make run_jsvecx$(RESET)    Run with JSVecX in browser\n"
+	@printf "  $(GREEN)make test$(RESET)          Run unit tests\n"
 	@printf "  $(GREEN)make clean$(RESET)         Remove build artifacts\n"
 
-.PHONY: all run run_mame run_retroarch run_jsvecx help usage clean
+.PHONY: all test run run_mame run_retroarch run_jsvecx help usage clean
 
 clean:
 	rm -rf build
