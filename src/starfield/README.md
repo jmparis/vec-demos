@@ -74,9 +74,10 @@ Sa routine de comportement est installee dans le champ `BEHAVIOUR`:
         std     BEHAVIOUR,x
 ```
 
-Dans l'etat actuel du code, c'est donc `simpleStarBehaviour2` qui est utilisee
-pour les nouveaux objets. `simpleStarBehaviour` reste presente dans le fichier,
-mais elle n'est pas referencee par `spawnStar`.
+`spawnStar` installe toujours `simpleStarBehaviour2` dans les objets importes.
+Dans l'integration actuelle de `vec-demos`, la boucle de demo utilise toutefois
+`DrawStarfieldDots`, un renderer BIOS base sur `Dot_d`, afin de garder la stack
+normale disponible pour les routines BIOS.
 
 Les positions `Y1` a `Y4` et `X1` a `X4` sont ensuite remplies avec la macro
 `RANDOM_A`, qui charge une valeur pseudo-aleatoire dans le registre `A`.
@@ -240,9 +241,20 @@ Le bloc `was_not_first_star` semble prevu pour supprimer un objet qui ne serait
 pas en tete de liste, mais il est actuellement inaccessible a cause du
 branchement direct vers `starCleanupDone`.
 
+## `DrawStarfieldDots`
+
+`DrawStarfieldDots` est le renderer utilise par la demo integree au menu.
+Il parcourt la liste `starlist_objects_head`, met a jour les positions avec
+`UpdateStarObject`, puis dessine quatre points par objet avec la routine BIOS
+`Dot_d`.
+
+Ce choix evite d'appeler des routines BIOS pendant que `S` est detourne comme
+pointeur d'objet par le renderer original.
+
 ## `simpleStarBehaviour2`
 
-`simpleStarBehaviour2` est la routine effectivement installee par `spawnStar`.
+`simpleStarBehaviour2` est la routine importee du code original et installee
+dans le champ `BEHAVIOUR` par `spawnStar`.
 Elle produit un effet de scintillement avec repositionnement aleatoire quand
 la valeur `TWINKLE` atteint une limite.
 

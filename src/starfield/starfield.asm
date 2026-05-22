@@ -33,7 +33,7 @@ u_offset1        =       -NEXT_STAR_OBJECT
 InitStarfieldDemo
         LDA     #%10110011                      ; LFSR seed for RANDOM_A
         STA     random_seed
-        LDD     #StarfieldObjectsDone           ; fake object returns here
+        LDD     #DrawStarfieldDone              ; fake object returns here
         STD     STARS_DONE_A
         CLRA
         STA     starCount
@@ -65,12 +65,108 @@ starfield_loop
         JSR     Read_Btns                       ; BIOS updates button RAM
         LDA     Vec_Button_1_2                  ; Button 2 returns to menu
         LBNE    return_to_menu
+        JSR     Intensity_3F                    ; BIOS marker while debugging launch
+        LDU     #starfield_title_packet
+        JSR     Print_Str_yx                    ; Confirms the demo loop is alive
         JSR     DP_to_D0                        ; VIA direct page for macros
-        LDS     starlist_objects_head           ; start object chain
-        PULS    d,pc                            ; D = y,x, PC = behaviour
-StarfieldObjectsDone
-        LDS     #Vec_Default_Stk                ; restore BIOS/user stack
+        JSR     Reset0Ref                       ; Center beam before raw star draw
+        JSR     DP_to_D0                        ; Reset0Ref may alter DP
+        JSR     DrawStarfieldDots               ; BIOS dot renderer for stars
         BRA     starfield_loop
+
+starfield_title_packet
+        FCB     $70,-$30                        ; small title at top of screen
+        FCC     "STARFIELD"
+        FCB     $80                             ; BIOS string terminator
+
+; ---------------------------------------------------------------------------
+; DrawStarfieldDots
+; Draws the active star objects with BIOS dot routines. This keeps the normal
+; stack available for BIOS calls, unlike the imported object-chain renderer.
+; ---------------------------------------------------------------------------
+DrawStarfieldDots
+        LDA     #4                              ; dot dwell: visible, low burn risk
+        STA     Vec_Dot_Dwell
+        JSR     Intensity_5F                    ; steady star brightness
+        JSR     DP_to_D0                        ; Dot_d expects DP = $D0
+        LDX     starlist_objects_head
+DrawStarfieldObject
+        CMPX    #OBJECT_LIST_COMPARE_ADDRESS
+        BLS     DrawStarfieldDone
+        JSR     UpdateStarObject
+
+        PSHS    x
+        JSR     Reset0Ref                       ; coordinates are object-relative
+        PULS    x
+        LDD     Y1_POS,x
+        PSHS    x
+        JSR     Dot_d                           ; BIOS dot at D = Y,X
+        PULS    x
+
+        PSHS    x
+        JSR     Reset0Ref
+        PULS    x
+        LDD     Y2_POS,x
+        PSHS    x
+        JSR     Dot_d
+        PULS    x
+
+        PSHS    x
+        JSR     Reset0Ref
+        PULS    x
+        LDD     Y3_POS,x
+        PSHS    x
+        JSR     Dot_d
+        PULS    x
+
+        PSHS    x
+        JSR     Reset0Ref
+        PULS    x
+        LDD     Y4_POS,x
+        PSHS    x
+        JSR     Dot_d
+        PULS    x
+
+        LDX     NEXT_STAR_OBJECT,x
+        BRA     DrawStarfieldObject
+DrawStarfieldDone
+        RTS
+
+; ---------------------------------------------------------------------------
+; UpdateStarObject
+; Moves each star downward. When a Y coordinate wraps, both coordinates are
+; randomized so the star reappears elsewhere.
+; ---------------------------------------------------------------------------
+UpdateStarObject
+        DEC     Y1_POS,x                        ; falling star Y update
+        BVC     UpdateStar2
+        RANDOM_A
+        STA     Y1_POS,x
+        RANDOM_A
+        STA     X1_POS,x
+UpdateStar2
+        DEC     Y2_POS,x                        ; falling star Y update
+        BVC     UpdateStar3
+        RANDOM_A
+        STA     Y2_POS,x
+        RANDOM_A
+        STA     X2_POS,x
+UpdateStar3
+        DEC     Y3_POS,x                        ; falling star Y update
+        BVC     UpdateStar4
+        RANDOM_A
+        STA     Y3_POS,x
+        RANDOM_A
+        STA     X3_POS,x
+UpdateStar4
+        DEC     Y4_POS,x                        ; falling star Y update
+        BVC     UpdateStarDone
+        RANDOM_A
+        STA     Y4_POS,x
+        RANDOM_A
+        STA     X4_POS,x
+UpdateStarDone
+        RTS
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
