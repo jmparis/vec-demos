@@ -3,18 +3,21 @@ PRJ := $(patsubst vec-%,%,$(notdir $(CURDIR)))
 SRCDIR=src
 BUILDDIR=build
 SRC=$(SRCDIR)/$(PRJ).asm
-SRC_DEPS=\
-		$(SRCDIR)/hello/hello.asm			\
-		$(SRCDIR)/music/music.asm 			\
-		$(SRCDIR)/music/music_melody.asm 	\
-		$(SRCDIR)/music/music_notes.i 		\
-		$(SRCDIR)/cube/cube.asm 			\
-		$(SRCDIR)/cube/engine3d.asm 		\
-		$(SRCDIR)/starfield/starfield.asm	\
-		$(SRCDIR)/starfield/macro.i
-ROM=$(BUILDDIR)/$(PRJ).bin
+SRC_DEPS=	\
+			$(SRCDIR)/hello/hello.asm			\
+			$(SRCDIR)/music/music.asm 			\
+			$(SRCDIR)/music/music_melody.asm 	\
+			$(SRCDIR)/music/music_notes.i 		\
+			$(SRCDIR)/cube/cube.asm 			\
+			$(SRCDIR)/cube/engine3d.asm 		\
+			$(SRCDIR)/starfield/starfield.asm	\
+			$(SRCDIR)/starfield/macro.i
 
-ASM=lwasm
+LST		=	$(BUILDDIR)/$(PRJ).lst
+ROM		=	$(BUILDDIR)/$(PRJ).bin
+
+ASM		=	lwasm
+ASMFLAGS=	-9 -f raw
 
 CONTAINER_ENGINE?=podman
 TEST_CONTAINER_IMAGE?=vec-demos-6809-test
@@ -53,7 +56,7 @@ all: $(ROM)
 
 $(ROM): $(SRC) $(SRC_DEPS)
 	mkdir -p build
-	$(ASM) -f raw -o $(ROM) $(SRC)
+	$(ASM) $(ASMFLAGS) -o $(ROM) --list=$(LST) --symbols $(SRC)
 #	objcopy -I srec -O binary --gap-fill 0xFF build/$(PRJ).srec $(ROM)
 
 test: test_python test_6809
