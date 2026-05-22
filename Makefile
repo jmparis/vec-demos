@@ -4,12 +4,14 @@ SRCDIR=src
 BUILDDIR=build
 SRC=$(SRCDIR)/$(PRJ).asm
 SRC_DEPS=\
-		$(SRCDIR)/hello/hello.asm		\
-		$(SRCDIR)/music/music.asm 		\
-		$(SRCDIR)/music/noel_melody.asm \
-		$(SRCDIR)/cube/cube.asm 		\
-		$(SRCDIR)/cube/engine3d.asm 	\
-		include/music_notes.i
+		$(SRCDIR)/hello/hello.asm			\
+		$(SRCDIR)/music/music.asm 			\
+		$(SRCDIR)/music/music_melody.asm 	\
+		$(SRCDIR)/music/music_notes.i 		\
+		$(SRCDIR)/cube/cube.asm 			\
+		$(SRCDIR)/cube/engine3d.asm 		\
+		$(SRCDIR)/starfield/starfield.asm	\
+		$(SRCDIR)/starfield/macro.i
 ROM=$(BUILDDIR)/$(PRJ).bin
 
 ASM=lwasm

@@ -5,7 +5,7 @@
 ;***************************************************************************
 ; DEFINE SECTION
 ;***************************************************************************
-                INCLUDE "../../include/music_notes.i"
+                INCLUDE "music_notes.i"
 
 ;***************************************************************************
 ; CODE SECTION
@@ -48,4 +48,4 @@ music_demo_packet:
                 FCC     "MUSIC"
                 FCB     $80                     ; $80 is end of string
 
-                INCLUDE "noel_melody.asm"
+                INCLUDE "music_melody.asm"
