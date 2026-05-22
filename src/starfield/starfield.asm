@@ -1,4 +1,76 @@
+        INCLUDE "macro.i"
+
 STAR_OR_DEFINED = 1
+STARFIELD_RAM_BASE =     $CA00
+STARS_DONE       =       STARFIELD_RAM_BASE     ; fake object: D bytes
+STARS_DONE_A     =       STARFIELD_RAM_BASE+2   ; fake object: PC bytes
+random_seed      =       STARFIELD_RAM_BASE+4
+OBJECT_LIST_COMPARE_ADDRESS = STARFIELD_RAM_BASE+5
+starlist_empty_head =    STARFIELD_RAM_BASE+5
+starlist_objects_head =  STARFIELD_RAM_BASE+7
+starCount        =       STARFIELD_RAM_BASE+9
+starobject_list  =       STARFIELD_RAM_BASE+10
+MAX_STAR_OBJECTS =       9
+STARFIELD_INITIAL_OBJECTS = 6
+Y1_POS           =       0
+X1_POS           =       1
+BEHAVIOUR        =       2
+NEXT_STAR_OBJECT =       4
+TWINKLE          =       6
+Y2_POS           =       7
+X2_POS           =       8
+Y3_POS           =       9
+X3_POS           =       10
+Y4_POS           =       11
+X4_POS           =       12
+StarStruct       =       13
+u_offset1        =       -NEXT_STAR_OBJECT
+
+; ---------------------------------------------------------------------------
+; InitStarfieldDemo
+; Builds the free object list in RAM and spawns the initial star objects.
+; ---------------------------------------------------------------------------
+InitStarfieldDemo
+        LDA     #%10110011                      ; LFSR seed for RANDOM_A
+        STA     random_seed
+        LDD     #StarfieldObjectsDone           ; fake object returns here
+        STD     STARS_DONE_A
+        CLRA
+        STA     starCount
+
+        LDA     #MAX_STAR_OBJECTS
+        LDU     #starobject_list
+        STU     starlist_empty_head
+        LDY     #STARS_DONE
+InitStarfieldList
+        LEAX    StarStruct,u                    ; next object in RAM pool
+        STX     NEXT_STAR_OBJECT,u
+        LEAU    ,x
+        DECA
+        BNE     InitStarfieldList
+        LEAU    -StarStruct,u
+        STY     NEXT_STAR_OBJECT,u              ; list terminator
+        STY     starlist_objects_head
+
+        JSR     spawnStar                       ; six objects, four stars each
+        JSR     spawnStar
+        JSR     spawnStar
+        JSR     spawnStar
+        JSR     spawnStar
+        JSR     spawnStar
+        RTS
+
+starfield_loop
+        JSR     Wait_Recal                      ; BIOS recalibration
+        JSR     Read_Btns                       ; BIOS updates button RAM
+        LDA     Vec_Button_1_2                  ; Button 2 returns to menu
+        LBNE    return_to_menu
+        JSR     DP_to_D0                        ; VIA direct page for macros
+        LDS     starlist_objects_head           ; start object chain
+        PULS    d,pc                            ; D = y,x, PC = behaviour
+StarfieldObjectsDone
+        LDS     #Vec_Default_Stk                ; restore BIOS/user stack
+        BRA     starfield_loop
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -6,221 +78,221 @@ STAR_OR_DEFINED = 1
 ; leaves with flags set to result
 ; (positive = not successfull) ROM
 ; negative = successfull RAM
-; destroys d, u 
-newStarObject                                             ;#isfunction  
-                    ldu      starlist_empty_head 
-                    cmpu     #OBJECT_LIST_COMPARE_ADDRESS 
-                    bls      cs_done_star 
-                                                          ; set the new empty head 
-                    ldd      NEXT_STAR_OBJECT,u           ; the next in out empty list will be the new 
-                    std      starlist_empty_head          ; head of our empty list 
-                                                          ; load last of current object list 
+; destroys d, u
+newStarObject                                   ;#isfunction
+        ldu     starlist_empty_head
+        cmpu    #OBJECT_LIST_COMPARE_ADDRESS
+        bls     cs_done_star
+                                                ; set the new empty head
+        ldd     NEXT_STAR_OBJECT,u              ; the next in out empty list will be the new
+        std     starlist_empty_head             ; head of our empty list
+                                                ; load last of current object list
 ; the old head is always our next
-                    ldd      starlist_objects_head 
-                    std      NEXT_STAR_OBJECT,u 
+        ldd     starlist_objects_head
+        std     NEXT_STAR_OBJECT,u
 ; newobject is always head
-                    stu      starlist_objects_head 
-                    inc      starCount                    ; and remember that we created a new object 
-cs_done_star 
-                    rts      
+        stu     starlist_objects_head
+        inc     starCount                       ; and remember that we created a new object
+cs_done_star
+        rts
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-spawnStar                                                 ;#isfunction  
-                    bsr      newStarObject                ; "create" (or rather get) new object 
-                    leax     ,u                           ; pointer to new object now in X also 
-                    cmpu     #OBJECT_LIST_COMPARE_ADDRESS 
-                    lbls      spawnStar_end 
-                                                          ; bpl spawnBonus_end ; if positve - there is no object left, jump out 
+spawnStar                                       ;#isfunction
+        bsr     newStarObject                   ; "create" (or rather get) new object
+        leax    ,u                              ; pointer to new object now in X also
+        cmpu    #OBJECT_LIST_COMPARE_ADDRESS
+        lbls    spawnStar_end
+                                                        ; bpl spawnBonus_end ; if positve - there is no object left, jump out
 ; copy and initialze new enemy
-                    ldd      #simpleStarBehaviour2 
-                    std      BEHAVIOUR,x 
-                    RANDOM_A  
-                    sta      Y1_POS,x 
-                    RANDOM_A  
-                    sta      Y2_POS,x 
-                    RANDOM_A  
-                    sta      Y3_POS,x 
-                    RANDOM_A  
-                    sta      Y4_POS,x 
-                    RANDOM_A  
-                    sta      X1_POS,x 
-                    anda     #TWINKLE_AND 
- if STAR_OR_DEFINED = 1
-                    ora     #TWINKLE_OR 
- endif
- lda #$7f
- RANDOM_A  
- anda #%01111111
- ora #8
-                    sta      TWINKLE , x 
-                    RANDOM_A  
-                    sta      X2_POS,x 
-                    RANDOM_A  
-                    sta      X3_POS,x 
-                    RANDOM_A  
-                    sta      X4_POS,x 
-spawnStar_end 
-                    rts      
+        ldd     #simpleStarBehaviour2
+        std     BEHAVIOUR,x
+        RANDOM_A
+        sta     Y1_POS,x
+        RANDOM_A
+        sta     Y2_POS,x
+        RANDOM_A
+        sta     Y3_POS,x
+        RANDOM_A
+        sta     Y4_POS,x
+        RANDOM_A
+        sta     X1_POS,x
+        anda    #TWINKLE_AND
+        if      STAR_OR_DEFINED = 1
+        ora     #TWINKLE_OR
+        endif
+        lda     #$7f
+        RANDOM_A
+        anda    #%01111111
+        ora     #8
+        sta     TWINKLE,x
+        RANDOM_A
+        sta     X2_POS,x
+        RANDOM_A
+        sta     X3_POS,x
+        RANDOM_A
+        sta     X4_POS,x
+spawnStar_end
+        rts
 
-;STAR_SHIFT          =        %11100000; $e0 
-STAR_SHIFT          =        %01100000; $e0 
-STAR_SHIFT          =        %00011110; $e0 
-TWINKLE_AND         =        %00111111 
-TWINKLE_OR          =        %00001111                    ; lowest twinkle brightness 
+;STAR_SHIFT          =        %11100000; $e0
+;STAR_SHIFT         =        %01100000          ; $e0
+STAR_SHIFT          =        %00011110          ; $e0
+TWINKLE_AND         =        %00111111
+TWINKLE_OR          =        %00001111          ; lowest twinkle brightness
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-_ZERO_VECTOR_BEAM2   macro    
-                    sta      <VIA_shift_reg 
-                    LDB      #$CC 
-                    STB      VIA_cntl                     ;/BLANK low and /ZERO low 
-                    endm     
+_ZERO_VECTOR_BEAM2 macro
+        sta     <VIA_shift_reg
+        LDB     #$CC
+        STB     VIA_cntl                        ;/BLANK low and /ZERO low
+        endm
 
-simpleStarBehaviour                                       ;#isfunction  
+simpleStarBehaviour                             ;#isfunction
 ; 1 ;;;
-                    MY_MOVE_TO_D_START  
-                    dec      Y1_POS+u_offset1,s 
-                    bvc      notBottom1 
-                    RANDOM_A  
-                    sta      X1_POS+u_offset1,s 
-                    anda     #TWINKLE_AND 
- if STAR_OR_DEFINED = 1
-                    ora     #TWINKLE_OR 
- endif
-                    sta      TWINKLE +u_offset1,s 
-notBottom1 
-                    lda      TWINKLE+u_offset1,s 
-                    MY_MOVE_TO_B_END  
+        MY_MOVE_TO_D_START
+        dec     Y1_POS+u_offset1,s
+        bvc     notBottom1
+        RANDOM_A
+        sta     X1_POS+u_offset1,s
+        anda    #TWINKLE_AND
+        if      STAR_OR_DEFINED = 1
+        ora     #TWINKLE_OR
+        endif
+        sta     TWINKLE+u_offset1,s
+notBottom1
+        lda     TWINKLE+u_offset1,s
+        MY_MOVE_TO_B_END
 
-                    _INTENSITY_A  
-                    lda      #STAR_SHIFT 
-                    _ZERO_VECTOR_BEAM2  
-                    ldd      #0 
-                    std      <VIA_port_b 
+        _INTENSITY_A
+        lda     #STAR_SHIFT
+        _ZERO_VECTOR_BEAM2
+        ldd     #0
+        std     <VIA_port_b
 ; 2 ;;;
-                    ldd      Y2_POS+u_offset1,s 
-                    MY_MOVE_TO_D_START  
-                    dec      Y2_POS+u_offset1,s 
-                    bvc      notBottom2 
-                    RANDOM_A  
-                    sta      X2_POS+u_offset1,s 
-                    anda     #TWINKLE_AND 
- if STAR_OR_DEFINED = 1
-                    ora     #TWINKLE_OR 
- endif
-                    sta      TWINKLE +u_offset1,s 
-notBottom2 
-                    lda      #STAR_SHIFT 
-                    MY_MOVE_TO_B_END  
-                    _ZERO_VECTOR_BEAM2  
-                    ldd      #0 
-                    std      <VIA_port_b 
+        ldd     Y2_POS+u_offset1,s
+        MY_MOVE_TO_D_START
+        dec     Y2_POS+u_offset1,s
+        bvc     notBottom2
+        RANDOM_A
+        sta     X2_POS+u_offset1,s
+        anda    #TWINKLE_AND
+        if      STAR_OR_DEFINED = 1
+        ora     #TWINKLE_OR
+        endif
+        sta     TWINKLE+u_offset1,s
+notBottom2
+        lda     #STAR_SHIFT
+        MY_MOVE_TO_B_END
+        _ZERO_VECTOR_BEAM2
+        ldd     #0
+        std     <VIA_port_b
 ; 3 ;;;
-                    ldd      Y3_POS+u_offset1,s 
-                    MY_MOVE_TO_D_START  
-                    dec      Y3_POS+u_offset1,s 
-                    bvc      notBottom3 
-                    RANDOM_A  
-                    sta      X3_POS+u_offset1,s 
-                    anda     #TWINKLE_AND 
- if STAR_OR_DEFINED = 1
-                    ora     #TWINKLE_OR 
- endif
+        ldd     Y3_POS+u_offset1,s
+        MY_MOVE_TO_D_START
+        dec     Y3_POS+u_offset1,s
+        bvc     notBottom3
+        RANDOM_A
+        sta     X3_POS+u_offset1,s
+        anda    #TWINKLE_AND
+        if      STAR_OR_DEFINED = 1
+        ora     #TWINKLE_OR
+        endif
 
 
 
 
-                    sta      TWINKLE +u_offset1,s 
-notBottom3 
-                    lda      #STAR_SHIFT 
-                    MY_MOVE_TO_B_END  
-                    _ZERO_VECTOR_BEAM2  
-                    ldd      #0 
-                    std      <VIA_port_b 
+        sta     TWINKLE+u_offset1,s
+notBottom3
+        lda     #STAR_SHIFT
+        MY_MOVE_TO_B_END
+        _ZERO_VECTOR_BEAM2
+        ldd     #0
+        std     <VIA_port_b
 ; 4 ;;;
-                    ldd      Y4_POS+u_offset1,s 
-                    MY_MOVE_TO_D_START  
-                    dec      Y4_POS+u_offset1,s 
-                    bvc      notBottom4 
-                    RANDOM_A  
-                    sta      X4_POS+u_offset1,s 
-                    anda     #TWINKLE_AND 
- if STAR_OR_DEFINED = 1
-                    ora     #TWINKLE_OR 
- endif
-                    sta      TWINKLE +u_offset1,s 
-notBottom4 
-                    lda      #STAR_SHIFT 
-                    MY_MOVE_TO_B_END  
-                    _ZERO_VECTOR_BEAM2  
-; end 
-                    lds      NEXT_STAR_OBJECT+u_offset1,s ; preload next user stack 
+        ldd     Y4_POS+u_offset1,s
+        MY_MOVE_TO_D_START
+        dec     Y4_POS+u_offset1,s
+        bvc     notBottom4
+        RANDOM_A
+        sta     X4_POS+u_offset1,s
+        anda    #TWINKLE_AND
+        if      STAR_OR_DEFINED = 1
+        ora     #TWINKLE_OR
+        endif
+        sta     TWINKLE+u_offset1,s
+notBottom4
+        lda     #STAR_SHIFT
+        MY_MOVE_TO_B_END
+        _ZERO_VECTOR_BEAM2
+; end
+        lds     NEXT_STAR_OBJECT+u_offset1,s    ; preload next user stack
 ; clean up
-                    LDa      #$CC 
-                    STA      VIA_cntl                     ;/BLANK low and /ZERO low 
-                    ldd      #0 
-                    std      <VIA_port_b 
-                    puls     d,pc                         ; (D = y,x, pc = next object) 
+        LDa     #$CC
+        STA     VIA_cntl                        ;/BLANK low and /ZERO low
+        ldd     #0
+        std     <VIA_port_b
+        puls    d,pc                            ; (D = y,x, pc = next object)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
-removeOneStar:                                            ;#isfunction  
-                    ldx      starlist_objects_head        ; is it the first? 
-was_first_star 
-                    ldu      NEXT_STAR_OBJECT,x           ; s pointer to next objext 
-                    stu      starlist_objects_head        ; the next object will be the first 
- bra starCleanupDone
-was_not_first_star                                        ;        find previous, go thru all objects from first and look where "I" am the next... 
-                    ldy      starlist_objects_head        ; start at list head 
-try_next_star 
-                    cmpx     NEXT_STAR_OBJECT,y           ; am I the next object of the current investigated list element 
-                    beq      found_next_switch_star       ; jup -> jump 
-                    ldy      NEXT_STAR_OBJECT,y           ; otherwise load the next as new current 
-                    bra      try_next_star                ; and search further 
+removeOneStar:                                  ;#isfunction
+        ldx     starlist_objects_head           ; is it the first?
+was_first_star
+        ldu     NEXT_STAR_OBJECT,x              ; s pointer to next objext
+        stu     starlist_objects_head           ; the next object will be the first
+        bra     starCleanupDone
+was_not_first_star                              ;        find previous, go thru all objects from first and look where "I" am the next...
+        ldy     starlist_objects_head           ; start at list head
+try_next_star
+        cmpx    NEXT_STAR_OBJECT,y              ; am I the next object of the current investigated list element
+        beq     found_next_switch_star          ; jup -> jump
+        ldy     NEXT_STAR_OBJECT,y              ; otherwise load the next as new current
+        bra     try_next_star                   ; and search further
 
-found_next_switch_star 
-                    ldu      NEXT_STAR_OBJECT,x           ; we load "our" next object to s 
-                    stu      NEXT_STAR_OBJECT,y           ; and store our next in the place of our previous next and thus eleminate ourselfs 
+found_next_switch_star
+        ldu     NEXT_STAR_OBJECT,x              ; we load "our" next object to s
+        stu     NEXT_STAR_OBJECT,y              ; and store our next in the place of our previous next and thus eleminate ourselfs
 starCleanupDone
-                    dec      starCount 
-                    ldy      starlist_empty_head          ; set u free, as new free head 
-                    sty      NEXT_STAR_OBJECT,x           ; load to u the next linked list element 
-                    stx      starlist_empty_head 
-                    rts                                   ; (D = y,x) 
+        dec     starCount
+        ldy     starlist_empty_head             ; set u free, as new free head
+        sty     NEXT_STAR_OBJECT,x              ; load to u the next linked list element
+        stx     starlist_empty_head
+        rts                                     ; (D = y,x)
 
 
 
-; 
+;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
 ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-simpleStarBehaviour2                                       ;#isfunction  
+simpleStarBehaviour2                            ;#isfunction
 ; 1 ;;;
- lda TWINKLE +u_offset1,s 
- sta <VIA_t1_cnt_lo
- lda Y1_POS+u_offset1,s 
-                    MY_MOVE_TO_D_START  
-;                    inc      TWINKLE +u_offset1,s 
- lda      TWINKLE +u_offset1,s 
- lsra
- lsra
- lsra
+        lda     TWINKLE+u_offset1,s
+        sta     <VIA_t1_cnt_lo
+        lda     Y1_POS+u_offset1,s
+        MY_MOVE_TO_D_START
+;                    inc      TWINKLE+u_offset1,s
+        lda     TWINKLE+u_offset1,s
+        lsra
+        lsra
+        lsra
 ; lsra
- lsra
- bne addyeah
- lda #1
+        lsra
+        bne     addyeah
+        lda     #1
 addyeah
- adda TWINKLE +u_offset1,s 
- sta TWINKLE +u_offset1,s 
-; lda      TWINKLE +u_offset1,s 
- cmpa #$7f
- blo constar2
- lda #8
- sta TWINKLE +u_offset1,s 
+        adda    TWINKLE+u_offset1,s
+        sta     TWINKLE+u_offset1,s
+; lda      TWINKLE+u_offset1,s
+        cmpa    #$7f
+        blo     constar2
+        lda     #8
+        sta     TWINKLE+u_offset1,s
 ; bne constar2
 ; lda #$7f
-; sta TWINKLE +u_offset1,s 
+; sta TWINKLE+u_offset1,s
 
 
 
@@ -228,72 +300,72 @@ addyeah
 
 
 
-                    RANDOM_A  
-                    sta      Y1_POS+u_offset1,s 
-                    RANDOM_A  
-                    sta      Y2_POS+u_offset1,s 
-                    RANDOM_A  
-                    sta      Y3_POS+u_offset1,s 
-                    RANDOM_A  
-                    sta      Y4_POS+u_offset1,s 
-                    RANDOM_A  
-                    sta      X1_POS+u_offset1,s 
-                    RANDOM_A  
-                    sta      X2_POS+u_offset1,s 
-                    RANDOM_A  
-                    sta      X3_POS+u_offset1,s 
-                    RANDOM_A  
-                    sta      X4_POS+u_offset1,s 
+        RANDOM_A
+        sta     Y1_POS+u_offset1,s
+        RANDOM_A
+        sta     Y2_POS+u_offset1,s
+        RANDOM_A
+        sta     Y3_POS+u_offset1,s
+        RANDOM_A
+        sta     Y4_POS+u_offset1,s
+        RANDOM_A
+        sta     X1_POS+u_offset1,s
+        RANDOM_A
+        sta     X2_POS+u_offset1,s
+        RANDOM_A
+        sta     X3_POS+u_offset1,s
+        RANDOM_A
+        sta     X4_POS+u_offset1,s
 
 
 
 
 
 constar2
-                    MY_MOVE_TO_B_END  
- lda #$7f
- suba TWINKLE +u_offset1,s 
- lda TWINKLE +u_offset1,s 
-                    _INTENSITY_A  
-                    lda      #STAR_SHIFT 
-                    _ZERO_VECTOR_BEAM2  
-                    ldd      #0 
-                    std      <VIA_port_b 
+        MY_MOVE_TO_B_END
+        lda     #$7f
+        suba    TWINKLE+u_offset1,s
+        lda     TWINKLE+u_offset1,s
+        _INTENSITY_A
+        lda     #STAR_SHIFT
+        _ZERO_VECTOR_BEAM2
+        ldd     #0
+        std     <VIA_port_b
 ; 2 ;;;
-                    ldd      Y2_POS+u_offset1,s 
-                    MY_MOVE_TO_D_START  
+        ldd     Y2_POS+u_offset1,s
+        MY_MOVE_TO_D_START
 
-                    lda      #STAR_SHIFT 
-                    MY_MOVE_TO_B_END  
-                    _ZERO_VECTOR_BEAM2  
-                    ldd      #0 
-                    std      <VIA_port_b 
+        lda     #STAR_SHIFT
+        MY_MOVE_TO_B_END
+        _ZERO_VECTOR_BEAM2
+        ldd     #0
+        std     <VIA_port_b
 ; 3 ;;;
-                    ldd      Y3_POS+u_offset1,s 
-                    MY_MOVE_TO_D_START  
+        ldd     Y3_POS+u_offset1,s
+        MY_MOVE_TO_D_START
 
-                    lda      #STAR_SHIFT 
-                    MY_MOVE_TO_B_END  
-                    _ZERO_VECTOR_BEAM2  
-                    ldd      #0 
-                    std      <VIA_port_b 
+        lda     #STAR_SHIFT
+        MY_MOVE_TO_B_END
+        _ZERO_VECTOR_BEAM2
+        ldd     #0
+        std     <VIA_port_b
 ; 4 ;;;
-                    ldd      Y4_POS+u_offset1,s 
-                    MY_MOVE_TO_D_START  
+        ldd     Y4_POS+u_offset1,s
+        MY_MOVE_TO_D_START
 
-                    lda      #STAR_SHIFT 
-                    MY_MOVE_TO_B_END  
-                    _ZERO_VECTOR_BEAM2  
-; end 
-                    lds      NEXT_STAR_OBJECT+u_offset1,s ; preload next user stack 
+        lda     #STAR_SHIFT
+        MY_MOVE_TO_B_END
+        _ZERO_VECTOR_BEAM2
+; end
+        lds     NEXT_STAR_OBJECT+u_offset1,s    ; preload next user stack
 ; clean up
-                    LDa      #$CC 
-                    STA      VIA_cntl                     ;/BLANK low and /ZERO low 
-                    ldd      #0 
-                    std      <VIA_port_b 
-                    puls     d,pc                         ; (D = y,x, pc = next object) 
+        LDa     #$CC
+        STA     VIA_cntl                        ;/BLANK low and /ZERO low
+        ldd     #0
+        std     <VIA_port_b
+        puls    d,pc                            ; (D = y,x, pc = next object)
 
-; 
+;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
 ;
