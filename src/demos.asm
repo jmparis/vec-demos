@@ -10,12 +10,20 @@
 menu_choice     EQU     $C8C0                   ; user RAM: highlighted menu item
 menu_joy_lock   EQU     $C8C1                   ; user RAM: joystick debounce flag
 menu_launch     EQU     $C8C2                   ; user RAM: requested menu launch
-menu_hello_ram  EQU     $C8D0                   ; user RAM: Hello menu text packet
-menu_music_ram  EQU     $C8E8                   ; user RAM: Music menu text packet
-menu_cube_ram   EQU     $C900                   ; user RAM: Cube menu text packet
+menu_top        EQU     $C8C3                   ; user RAM: first visible menu item
+menu_hello_ram  EQU     $C8C8                   ; user RAM: Hello menu text packet
+menu_music_ram  EQU     $C8DA                   ; user RAM: Music menu text packet
+menu_cube_ram   EQU     $C8E4                   ; user RAM: Cube menu text packet
+menu_demo4_ram  EQU     $C8ED                   ; user RAM: Demo 4 menu text packet
+menu_demo5_ram  EQU     $C8F8                   ; user RAM: Demo 5 menu text packet
 menu_first      EQU     0                       ; menu index: Hello World demo
 menu_second     EQU     1                       ; menu index: Music demo
 menu_third      EQU     2                       ; menu index: Cube demo
+menu_fourth     EQU     3                       ; menu index: placeholder demo 4
+menu_fifth      EQU     4                       ; menu index: placeholder demo 5
+menu_last       EQU     menu_fifth              ; last selectable menu index
+menu_visible    EQU     3                       ; visible menu lines at once
+menu_max_top    EQU     menu_last-menu_visible+1 ; last scrolling window start
 menu_no_launch  EQU     $FF                     ; no menu entry requested
 menu_text_first EQU     2                       ; text starts after Y, X bytes
 menu_cursor     EQU     $3E                     ; '>' cursor character
@@ -23,6 +31,7 @@ menu_space      EQU     $20                     ; space character
 menu_hello_len  EQU     18                      ; Y, X, 15 chars, $80
 menu_music_len  EQU     10                      ; Y, X, 7 chars, $80
 menu_cube_len   EQU     9                       ; Y, X, 6 chars, $80
+menu_demo_len   EQU     11                      ; Y, X, 8 chars, $80
 
 ; start of vectrex memory with cartridge name...
                 ORG     $0
@@ -70,6 +79,18 @@ return_to_menu:
                 JSR     InitMenu
                 BRA     menu_loop
 
+launch_hello_world:
+                JSR     InitHelloWorld
+                LBRA    hello_loop
+
+launch_music_demo:
+                JSR     InitMusicDemo
+                LBRA    music_demo_loop
+
+launch_cube_demo:
+                JSR     InitCubeDemo
+                LBRA    cube_loop
+
 ; ---------------------------------------------------------------------------
 ; InitMenu
 ; Resets menu state when the cartridge starts or when a demo exits.
@@ -78,6 +99,7 @@ InitMenu:
                 CLRA                            ; Menu starts on first entry
                 STA     menu_choice
                 STA     menu_joy_lock
+                STA     menu_top
                 LDA     #menu_no_launch
                 STA     menu_launch
                 LDA     #3
@@ -87,8 +109,8 @@ InitMenu:
 
 ; ---------------------------------------------------------------------------
 ; CopyMenuTextPackets
-; Copies menu text packets to RAM so DrawMenu can replace the first character
-; with the cursor without attempting to modify cartridge ROM.
+; Copies menu text packets to RAM so DrawMenu can patch visible Y coordinates
+; and cursor characters without attempting to modify cartridge ROM.
 ; ---------------------------------------------------------------------------
 CopyMenuTextPackets:
                 LDX     #menu_hello_template    ; ROM source: Y, X, string
@@ -117,19 +139,25 @@ copy_menu_cube:
                 STA     ,U+
                 DECB
                 BNE     copy_menu_cube
+
+                LDX     #menu_demo4_template    ; ROM source: Y, X, string
+                LDU     #menu_demo4_ram         ; RAM packet for Print_Str_yx
+                LDB     #menu_demo_len          ; Copy count, including $80
+copy_menu_demo4:
+                LDA     ,X+
+                STA     ,U+
+                DECB
+                BNE     copy_menu_demo4
+
+                LDX     #menu_demo5_template    ; ROM source: Y, X, string
+                LDU     #menu_demo5_ram         ; RAM packet for Print_Str_yx
+                LDB     #menu_demo_len          ; Copy count, including $80
+copy_menu_demo5:
+                LDA     ,X+
+                STA     ,U+
+                DECB
+                BNE     copy_menu_demo5
                 RTS
-
-launch_hello_world:
-                JSR     InitHelloWorld
-                LBRA    hello_loop
-
-launch_music_demo:
-                JSR     InitMusicDemo
-                LBRA    music_demo_loop
-
-launch_cube_demo:
-                JSR     InitCubeDemo
-                LBRA    cube_loop
 
 ; ---------------------------------------------------------------------------
 ; UpdateMenuInput
@@ -159,34 +187,56 @@ check_joy_lock:
 
 select_next:
                 LDA     menu_choice
-                CMPA    #menu_third
+                CMPA    #menu_last
                 BEQ     select_first
                 INCA
                 STA     menu_choice
+                JSR     UpdateMenuScroll        ; Keep selection inside window
                 RTS
 
 select_first:
                 LDA     #menu_first
                 STA     menu_choice
+                STA     menu_top
                 RTS
 
 select_previous:
                 LDA     menu_choice
                 CMPA    #menu_first
-                BEQ     select_third
+                BEQ     select_last
                 DECA
                 STA     menu_choice
+                JSR     UpdateMenuScroll        ; Keep selection inside window
                 RTS
 
-select_second:
-                LDA     #menu_second
+select_last:
+                LDA     #menu_last
                 STA     menu_choice
-                RTS
-
-select_third:
-                LDA     #menu_third
-                STA     menu_choice
+                LDA     #menu_max_top
+                STA     menu_top
 update_menu_done:
+                RTS
+
+; ---------------------------------------------------------------------------
+; UpdateMenuScroll
+; Scrolls the menu window only when the selected item leaves the visible
+; three-line area. This avoids extra redraw work and keeps movement readable.
+; ---------------------------------------------------------------------------
+UpdateMenuScroll:
+                LDA     menu_choice
+                CMPA    menu_top
+                BHS     check_scroll_bottom
+                STA     menu_top
+                RTS
+
+check_scroll_bottom:
+                SUBA    menu_top                ; A = selected offset in window
+                CMPA    #menu_visible
+                BLO     update_scroll_done
+                LDA     menu_choice
+                SUBA    #menu_visible-1         ; Top follows selected item down
+                STA     menu_top
+update_scroll_done:
                 RTS
 
 ; ---------------------------------------------------------------------------
@@ -203,68 +253,159 @@ DrawMenu:
                 STA     menu_hello_ram+menu_text_first
                 STA     menu_music_ram+menu_text_first
                 STA     menu_cube_ram+menu_text_first
+                STA     menu_demo4_ram+menu_text_first
+                STA     menu_demo5_ram+menu_text_first
                 LDA     menu_choice
-                CMPA    #menu_first
-                BNE     check_music_cursor
+                CMPA    #menu_second
+                BEQ     mark_music_cursor
+                CMPA    #menu_third
+                BEQ     mark_cube_cursor
+                CMPA    #menu_fourth
+                BEQ     mark_demo4_cursor
+                CMPA    #menu_fifth
+                BEQ     mark_demo5_cursor
                 LDA     #menu_cursor
                 STA     menu_hello_ram+menu_text_first
-                BRA     draw_menu_items
+                BRA     draw_visible_menu
 
-check_music_cursor:
-                CMPA    #menu_second
-                BNE     mark_cube_cursor
 mark_music_cursor:
                 LDA     #menu_cursor
                 STA     menu_music_ram+menu_text_first
-                BRA     draw_menu_items
+                BRA     draw_visible_menu
 
 mark_cube_cursor:
                 LDA     #menu_cursor
                 STA     menu_cube_ram+menu_text_first
+                BRA     draw_visible_menu
 
-draw_menu_items:
-                LDA     menu_choice
-                CMPA    #menu_first
+mark_demo4_cursor:
+                LDA     #menu_cursor
+                STA     menu_demo4_ram+menu_text_first
+                BRA     draw_visible_menu
+
+mark_demo5_cursor:
+                LDA     #menu_cursor
+                STA     menu_demo5_ram+menu_text_first
+
+draw_visible_menu:
+                LDA     menu_top
+                CMPA    #menu_second
+                BEQ     draw_menu_top_music
+                CMPA    #menu_third
+                BEQ     draw_menu_top_cube
+
+draw_menu_top_hello:
+                LDA     #$10                    ; Top visible menu Y coordinate
+                STA     menu_hello_ram
+                LDA     #-$10                   ; Middle visible menu Y coordinate
+                STA     menu_music_ram
+                LDA     #-$30                   ; Bottom visible menu Y coordinate
+                STA     menu_cube_ram
+                JSR     DrawHelloMenuEntry
+                JSR     DrawMusicMenuEntry
+                JSR     DrawCubeMenuEntry
+                JSR     DrawMenuHelp
+                RTS
+
+draw_menu_top_music:
+                LDA     #$10                    ; Top visible menu Y coordinate
+                STA     menu_music_ram
+                LDA     #-$10                   ; Middle visible menu Y coordinate
+                STA     menu_cube_ram
+                LDA     #-$30                   ; Bottom visible menu Y coordinate
+                STA     menu_demo4_ram
+                JSR     DrawMusicMenuEntry
+                JSR     DrawCubeMenuEntry
+                JSR     DrawDemo4MenuEntry
+                JSR     DrawMenuHelp
+                RTS
+
+draw_menu_top_cube:
+                LDA     #$10                    ; Top visible menu Y coordinate
+                STA     menu_cube_ram
+                LDA     #-$10                   ; Middle visible menu Y coordinate
+                STA     menu_demo4_ram
+                LDA     #-$30                   ; Bottom visible menu Y coordinate
+                STA     menu_demo5_ram
+                JSR     DrawCubeMenuEntry
+                JSR     DrawDemo4MenuEntry
+                JSR     DrawDemo5MenuEntry
+                JSR     DrawMenuHelp
+                RTS
+
+DrawHelloMenuEntry:
+                LDA     menu_hello_ram+menu_text_first
+                CMPA    #menu_cursor
                 BNE     draw_hello_plain
                 JSR     Intensity_7F            ; Highlight selected menu item
                 LDU     #menu_hello_ram
                 JSR     Print_Str_yx
-                BRA     draw_music_item
+                RTS
 
 draw_hello_plain:
                 JSR     Intensity_3F            ; Dim unselected menu item
                 LDU     #menu_hello_ram
                 JSR     Print_Str_yx
+                RTS
 
-draw_music_item:
-                LDA     menu_choice
-                CMPA    #menu_second
+DrawMusicMenuEntry:
+                LDA     menu_music_ram+menu_text_first
+                CMPA    #menu_cursor
                 BNE     draw_music_plain
                 JSR     Intensity_7F            ; Highlight selected menu item
                 LDU     #menu_music_ram
                 JSR     Print_Str_yx
-                BRA     draw_cube_item
+                RTS
 
 draw_music_plain:
                 JSR     Intensity_3F            ; Dim unselected menu item
                 LDU     #menu_music_ram
                 JSR     Print_Str_yx
+                RTS
 
-draw_cube_item:
-                LDA     menu_choice
-                CMPA    #menu_third
+DrawCubeMenuEntry:
+                LDA     menu_cube_ram+menu_text_first
+                CMPA    #menu_cursor
                 BNE     draw_cube_plain
                 JSR     Intensity_7F            ; Highlight selected menu item
                 LDU     #menu_cube_ram
                 JSR     Print_Str_yx
-                JSR     DrawMenuHelp
                 RTS
 
 draw_cube_plain:
                 JSR     Intensity_3F            ; Dim unselected menu item
                 LDU     #menu_cube_ram
                 JSR     Print_Str_yx
-                JSR     DrawMenuHelp
+                RTS
+
+DrawDemo4MenuEntry:
+                LDA     menu_demo4_ram+menu_text_first
+                CMPA    #menu_cursor
+                BNE     draw_demo4_plain
+                JSR     Intensity_7F            ; Highlight selected menu item
+                LDU     #menu_demo4_ram
+                JSR     Print_Str_yx
+                RTS
+
+draw_demo4_plain:
+                JSR     Intensity_3F            ; Dim unselected menu item
+                LDU     #menu_demo4_ram
+                JSR     Print_Str_yx
+                RTS
+
+DrawDemo5MenuEntry:
+                LDA     menu_demo5_ram+menu_text_first
+                CMPA    #menu_cursor
+                BNE     draw_demo5_plain
+                JSR     Intensity_7F            ; Highlight selected menu item
+                LDU     #menu_demo5_ram
+                JSR     Print_Str_yx
+                RTS
+
+draw_demo5_plain:
+                JSR     Intensity_3F            ; Dim unselected menu item
+                LDU     #menu_demo5_ram
+                JSR     Print_Str_yx
                 RTS
 
 ; ---------------------------------------------------------------------------
@@ -287,20 +428,30 @@ menu_title_packet:
                 FCC     "VECTREX DEMOS"
                 FCB     $80                     ; $80 is end of string
 menu_hello_template:
-                FCB     $10,-$50                ; first menu entry position
+                FCB     0,-$50                  ; Y patched by scrolling menu
                 FCC     "  HELLO WORLD !"
                 FCB     $80                     ; $80 is end of string
 menu_hello_template_end:
 menu_music_template:
-                FCB     -$10,-$50               ; second menu entry position
+                FCB     0,-$50                  ; Y patched by scrolling menu
                 FCC     "  MUSIC"
                 FCB     $80                     ; $80 is end of string
 menu_music_template_end:
 menu_cube_template:
-                FCB     -$30,-$50               ; third menu entry position
+                FCB     0,-$50                  ; Y patched by scrolling menu
                 FCC     "  CUBE"
                 FCB     $80                     ; $80 is end of string
 menu_cube_template_end:
+menu_demo4_template:
+                FCB     0,-$50                  ; Y patched by scrolling menu
+                FCC     "  DEMO 4"
+                FCB     $80                     ; $80 is end of string
+menu_demo4_template_end:
+menu_demo5_template:
+                FCB     0,-$50                  ; Y patched by scrolling menu
+                FCC     "  DEMO 5"
+                FCB     $80                     ; $80 is end of string
+menu_demo5_template_end:
 menu_help_run_packet:
                 FCB     -$50,-$78               ; help text below menu entries
                 FCC     "BUTTON 1 TO RUN"
