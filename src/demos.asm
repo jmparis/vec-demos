@@ -14,12 +14,12 @@ menu_top        EQU     $C8C3                   ; user RAM: first visible menu i
 menu_hello_ram  EQU     $C8C8                   ; user RAM: Hello menu text packet
 menu_music_ram  EQU     $C8DA                   ; user RAM: Music menu text packet
 menu_cube_ram   EQU     $C8E4                   ; user RAM: Cube menu text packet
-menu_demo4_ram  EQU     $C8ED                   ; user RAM: Demo 4 menu text packet
-menu_demo5_ram  EQU     $C8F8                   ; user RAM: Demo 5 menu text packet
+menu_demo4_ram  EQU     $C8ED                   ; user RAM: Starfield menu text packet
+menu_demo5_ram  EQU     $C8FB                   ; user RAM: Demo 5 menu text packet
 menu_first      EQU     0                       ; menu index: Hello World demo
 menu_second     EQU     1                       ; menu index: Music demo
 menu_third      EQU     2                       ; menu index: Cube demo
-menu_fourth     EQU     3                       ; menu index: placeholder demo 4
+menu_fourth     EQU     3                       ; menu index: Starfield demo
 menu_fifth      EQU     4                       ; menu index: placeholder demo 5
 menu_last       EQU     menu_fifth              ; last selectable menu index
 menu_visible    EQU     3                       ; visible menu lines at once
@@ -31,6 +31,7 @@ menu_space      EQU     $20                     ; space character
 menu_hello_len  EQU     18                      ; Y, X, 15 chars, $80
 menu_music_len  EQU     10                      ; Y, X, 7 chars, $80
 menu_cube_len   EQU     9                       ; Y, X, 6 chars, $80
+menu_demo4_len  EQU     14                      ; Y, X, 11 chars, $80
 menu_demo_len   EQU     11                      ; Y, X, 8 chars, $80
 
 ; start of vectrex memory with cartridge name...
@@ -66,6 +67,8 @@ menu_loop:
                 BEQ     launch_music_demo
                 CMPA    #menu_third
                 BEQ     launch_cube_demo
+                CMPA    #menu_fourth
+                BEQ     launch_starfield_demo
                 LDA     #menu_no_launch         ; Unknown entry: keep menu open
                 STA     menu_launch
                 JSR     DrawMenu                ; Draw menu every frame
@@ -90,6 +93,10 @@ launch_music_demo:
 launch_cube_demo:
                 JSR     InitCubeDemo
                 LBRA    cube_loop
+
+launch_starfield_demo:
+                JSR     InitStarfieldDemo
+                LBRA    starfield_loop
 
 ; ---------------------------------------------------------------------------
 ; InitMenu
@@ -142,7 +149,7 @@ copy_menu_cube:
 
                 LDX     #menu_demo4_template    ; ROM source: Y, X, string
                 LDU     #menu_demo4_ram         ; RAM packet for Print_Str_yx
-                LDB     #menu_demo_len          ; Copy count, including $80
+                LDB     #menu_demo4_len         ; Copy count, including $80
 copy_menu_demo4:
                 LDA     ,X+
                 STA     ,U+
@@ -444,7 +451,7 @@ menu_cube_template:
 menu_cube_template_end:
 menu_demo4_template:
                 FCB     0,-$50                  ; Y patched by scrolling menu
-                FCC     "  DEMO 4"
+                FCC     "  STARFIELD"
                 FCB     $80                     ; $80 is end of string
 menu_demo4_template_end:
 menu_demo5_template:
@@ -464,6 +471,7 @@ menu_help_exit_packet:
                 INCLUDE "hello/hello.asm"
                 INCLUDE "music/music.asm"
                 INCLUDE "cube/cube.asm"
+                INCLUDE "starfield/starfield.asm"
 
 ;***************************************************************************
                 END     main
