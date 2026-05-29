@@ -23,5 +23,6 @@
     "indentRainbow.enabled": true,
     "6x09Assembly.lwasm.arguments": "--6809",
     "6x09Assembly.lwasm.path.linux": "~/.local/bin/lwasm",
-    "6x09Assembly.xroar.path.linux": "/usr/bin/xroar"
+    "6x09Assembly.xroar.path.linux": "/usr/bin/xroar",
+    "makefile.configureOnOpen": false
 }
